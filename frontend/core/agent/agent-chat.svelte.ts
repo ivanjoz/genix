@@ -53,10 +53,21 @@ interface AgentStatusPayload {
   MaxSteps: number;
 }
 
+// A local model call as it runs (llm.LocalProgress): only turns on the local provider send it.
+export interface AgentProgressPayload {
+  Phase: 'prefill' | 'thinking' | 'answer';
+  PromptTokens: number;
+  PromptProcessed: number;
+  PromptMs: number;
+  GeneratedTokens: number;
+  TokensPerSecond: number;
+}
+
 const CHAT_TYPE_AGENT_REPLY = 'agentReply';
 const CHAT_TYPE_AGENT_ERROR = 'agentError';
 const CHAT_TYPE_AGENT_STATUS = 'agentStatus';
 const CHAT_TYPE_AGENT_SECTIONS = 'agentSections';
+const CHAT_TYPE_AGENT_PROGRESS = 'agentProgress';
 const CHAT_TYPE_TURN_END = 'turnEnd';
 const CHAT_LOG_KEY = '__agent_chat_debug_log';
 const CHAT_LOG_LIMIT = 120;
@@ -73,6 +84,8 @@ export const agentChat = $state({
   statusLabel: '',
   // The header lane keeps the previous label just long enough to animate it out.
   headerStatusItems: [] as { id: number; label: string }[],
+  // The running local model call, for the progress bar. Null outside a turn and on remote models.
+  progress: null as AgentProgressPayload | null,
 });
 
 let historyLoaded = false;
@@ -113,6 +126,7 @@ const clearTurnState = () => {
   agentChat.isBusy = false;
   agentChat.statusLabel = '';
   agentChat.headerStatusItems = [];
+  agentChat.progress = null;
 };
 
 const addChatRow = async (row: AgentChatRow) => {
@@ -278,6 +292,11 @@ const handleChatEvent = async (env: ChatStreamEvent) => {
         restoreExpandedPanel(`agent status: ${payload?.State || 'unknown'}`);
         agentChat.statusLabel = label;
       }
+      break;
+    }
+    case CHAT_TYPE_AGENT_PROGRESS: {
+      // Several per second: neither logged nor persisted.
+      agentChat.progress = env.Payload as AgentProgressPayload;
       break;
     }
     case CHAT_TYPE_TURN_END: {

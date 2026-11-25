@@ -11,6 +11,7 @@ import (
 
 	"app/core"
 	"genix-agent/harness"
+	"genix-agent/llm"
 	"genix-agent/pagebuilder"
 	"genix-agent/routing"
 	"genix-agent/salestools"
@@ -37,6 +38,9 @@ const (
 	ChatTypeAgentStatus   = "agentStatus"
 	ChatTypeAgentError    = "agentError"
 	ChatTypeAgentSections = "agentSections" // page-builder edits to apply back into the builder
+	// ChatTypeAgentProgress reports a local model call as it runs (llm.LocalProgress), a few times
+	// a second: the widget's progress bar.
+	ChatTypeAgentProgress = "agentProgress"
 	// ChatTypeTurnEnd is the last frame of a turn stream. The body closing is
 	// already the real signal; this lets the browser tell a finished turn apart
 	// from a dropped connection.
@@ -236,6 +240,15 @@ func (s *AgentSession) sendJSON(kind string, payload any) {
 		return
 	}
 	core.Log("agent.chat send tab::", shortTabID(s.TabID), " type::", kind, " payload_bytes::", len(body))
+}
+
+// pushProgress sends a local model call's progress. It is not logged: it arrives several times a
+// second, and the call itself is logged when it ends.
+// A flat struct of numbers and a string cannot fail to marshal.
+func (s *AgentSession) pushProgress(progress llm.LocalProgress) {
+	payload, _ := json.Marshal(progress)
+	envelope, _ := json.Marshal(chatEnvelope{Type: ChatTypeAgentProgress, Payload: payload})
+	_ = s.pushEvent(envelope)
 }
 
 func (s *AgentSession) sendError(msg string) {

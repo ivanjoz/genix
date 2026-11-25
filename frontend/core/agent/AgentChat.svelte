@@ -16,6 +16,7 @@
   import { AGENT_ROLE_STATUS, AGENT_ROLE_USER } from './chat_history.idb';
   import {
     agentChat, answerAgentPause, chatLog, ensureAgentHistoryLoaded, expandAgentPanelForUserInteraction, sendAgentTurn,
+    type AgentProgressPayload,
   } from './agent-chat.svelte';
   import AgentAnswer from './AgentAnswer.svelte';
   import { agentModes } from './agent.svelte';
@@ -191,7 +192,31 @@
   };
 </script>
 
+{#snippet progressBar(progress: AgentProgressPayload)}
+  <!-- What the local model is doing: encoding the prompt (filling the bar), then decoding at its
+       tokens per second. -->
+  {@const isEncoding = progress.Phase === 'prefill'}
+  {@const encodedPercent = progress.PromptTokens > 0 ? Math.round(progress.PromptProcessed * 100 / progress.PromptTokens) : 0}
+  <div class="_progress px-12 pt-6 pb-4" role="status">
+    <div class="_progressTrack">
+      <div class="_progressFill" class:_progressDecoding={!isEncoding} style:width="{isEncoding ? encodedPercent : 100}%"></div>
+    </div>
+    <div class="flex items-center gap-12 pt-4 text-[11px] leading-tight tabular-nums text-fg-subtle">
+      <span class:text-fg={isEncoding}>
+        Leyendo contexto {isEncoding ? `${encodedPercent}% · ` : ''}{progress.PromptTokens} tok · {(progress.PromptMs / 1000).toFixed(1)} s
+      </span>
+      {#if !isEncoding}
+        <span class="text-fg">{progress.Phase === 'thinking' ? 'Pensando' : 'Respondiendo'} · {progress.GeneratedTokens} tok</span>
+        <span class="ml-auto font-medium text-fg">{progress.TokensPerSecond.toFixed(1)} t/s</span>
+      {/if}
+    </div>
+  </div>
+{/snippet}
+
 {#snippet conversationPanel()}
+  {#if agentChat.isBusy && agentChat.progress}
+    {@render progressBar(agentChat.progress)}
+  {/if}
   {#if isInteractionPanelCollapsed}
     <!-- Keep the driven page visible while retaining a clear activity cue. -->
     <div class="min-h-30 flex items-center px-12 text-sm text-red-fg" role="status" aria-live="polite">
@@ -478,6 +503,30 @@
   ._scrollLayer {
     max-height: calc(70vh - 120px);
     mask-image: linear-gradient(to bottom, transparent 0, transparent 6px, #000 28px);
+  }
+  ._progress {
+    border-bottom: 1px solid var(--line);
+  }
+  ._progressTrack {
+    height: 3px;
+    border-radius: 999px;
+    background: var(--line);
+    overflow: hidden;
+  }
+  ._progressFill {
+    height: 100%;
+    background: var(--accent-solid);
+    transition: width 250ms linear;
+  }
+  /* Decoding has no end to measure: a moving stripe shows the model is still producing tokens. */
+  ._progressDecoding {
+    background: linear-gradient(90deg, var(--accent-solid) 0%, color-mix(in oklab, var(--accent-solid) 35%, var(--surface)) 50%, var(--accent-solid) 100%);
+    background-size: 200% 100%;
+    animation: progress-decoding 1.2s linear infinite;
+  }
+  @keyframes progress-decoding {
+    from { background-position: 200% 0; }
+    to { background-position: 0 0; }
   }
   ._spinner {
     width: 14px;

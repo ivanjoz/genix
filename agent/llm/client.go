@@ -44,6 +44,9 @@ import (
 const (
 	ProviderMeta       = "meta"
 	ProviderOpenRouter = "openrouter"
+	// ProviderLocal is a llama-server at agent.local_model_url (genix-local-ai): no key, and its
+	// calls report their progress to the chat (local_stream.go).
+	ProviderLocal = "local"
 )
 
 const (
@@ -59,11 +62,13 @@ const (
 type providerConfig struct {
 	Endpoint string
 	// KeyName is the config.toml field carrying the bearer token. Only used
-	// to name the missing variable in NewClient's error.
+	// to name the missing variable in NewClient's error. Empty = no key needed.
 	KeyName string
 	// AnalyticsHeaders are provider-specific headers that don't affect routing
 	// or pricing (OpenRouter dashboard attribution). Meta needs none.
 	AnalyticsHeaders map[string]string
+	// Transport replaces the default HTTP transport. Nil = http.DefaultTransport.
+	Transport http.RoundTripper
 }
 
 var providerConfigs = map[string]providerConfig{
@@ -76,6 +81,23 @@ var providerConfigs = map[string]providerConfig{
 		KeyName:          "agent.openrouter_key",
 		AnalyticsHeaders: map[string]string{"HTTP-Referer": "https://genix.app", "X-Title": "Genix"},
 	},
+	ProviderLocal: {Transport: LocalStreamTransport{}},
+}
+
+// providerConfigFor returns the provider's connection settings. The local provider's endpoint is
+// the llama-server URL in config.toml, which differs per deployment.
+func providerConfigFor(provider string) (providerConfig, error) {
+	config, known := providerConfigs[provider]
+	if !known {
+		return providerConfig{}, fmt.Errorf("unsupported model provider %q", provider)
+	}
+	if provider == ProviderLocal {
+		if core.Env == nil || core.Env.LOCAL_MODEL_URL == "" {
+			return providerConfig{}, errors.New("agent.local_model_url not set in config.toml")
+		}
+		config.Endpoint = strings.TrimSuffix(core.Env.LOCAL_MODEL_URL, "/") + "/chat/completions"
+	}
+	return config, nil
 }
 
 // ActiveProvider resolves providers.model from config.toml. Blank means
@@ -88,7 +110,7 @@ func ActiveProvider() string {
 		return ProviderOpenRouter
 	}
 	switch provider := strings.ToLower(strings.TrimSpace(core.Env.MODEL_PROVIDER)); provider {
-	case ProviderMeta, ProviderOpenRouter:
+	case ProviderMeta, ProviderOpenRouter, ProviderLocal:
 		return provider
 	case "":
 		return ProviderOpenRouter
@@ -99,13 +121,17 @@ func ActiveProvider() string {
 }
 
 // apiKeyForProvider reads the bearer token of the given provider from core.Env.
-// Only the active provider's key has to be present — the other can stay empty.
+// Only the active provider's key has to be present — the other can stay empty. The local
+// provider takes none.
 func apiKeyForProvider(provider string) string {
 	if core.Env == nil {
 		return ""
 	}
-	if provider == ProviderMeta {
+	switch provider {
+	case ProviderMeta:
 		return core.Env.META_KEY
+	case ProviderLocal:
+		return ""
 	}
 	return core.Env.OPENROUTER_KEY
 }
@@ -287,12 +313,13 @@ func NewClientForProvider(provider, modelID string) (*Client, error) {
 	if provider == "" {
 		provider = ActiveProvider()
 	}
-	if _, known := providerConfigs[provider]; !known {
-		return nil, fmt.Errorf("unsupported model provider %q", provider)
+	config, err := providerConfigFor(provider)
+	if err != nil {
+		return nil, err
 	}
 	apiKey := apiKeyForProvider(provider)
-	if apiKey == "" {
-		return nil, fmt.Errorf("%s not set in config.toml (providers.model=%s)", providerConfigs[provider].KeyName, provider)
+	if apiKey == "" && config.KeyName != "" {
+		return nil, fmt.Errorf("%s not set in config.toml (providers.model=%s)", config.KeyName, provider)
 	}
 	// A registry with no entry for the active provider leaves every request without
 	// a model id, which the upstream answers with an opaque 400 — say so at startup,
@@ -333,11 +360,11 @@ func adaptRequestToProvider(provider string, req *ChatRequest) {
 // (the endpoint without /chat/completions), the key and the attribution headers. The Eino chat
 // model (harness/model.go) is built from it, so both clients reach the same upstreams.
 func ProviderConnection(provider string) (baseURL, apiKey string, headers map[string]string, err error) {
-	config, known := providerConfigs[provider]
-	if !known {
-		return "", "", nil, fmt.Errorf("unsupported model provider %q", provider)
+	config, err := providerConfigFor(provider)
+	if err != nil {
+		return "", "", nil, err
 	}
-	if apiKey = apiKeyForProvider(provider); apiKey == "" {
+	if apiKey = apiKeyForProvider(provider); apiKey == "" && config.KeyName != "" {
 		return "", "", nil, fmt.Errorf("%s not set in config.toml", config.KeyName)
 	}
 	return strings.TrimSuffix(config.Endpoint, "/chat/completions"), apiKey, config.AnalyticsHeaders, nil
@@ -380,13 +407,13 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, erro
 	if c.RouteByModel && modelConfig.Provider != "" {
 		requestProvider = modelConfig.Provider
 	}
-	config, knownProvider := providerConfigs[requestProvider]
-	if !knownProvider {
-		return nil, fmt.Errorf("unsupported model provider %q for model %q", requestProvider, req.Model)
+	config, err := providerConfigFor(requestProvider)
+	if err != nil {
+		return nil, fmt.Errorf("model %q: %w", req.Model, err)
 	}
 	if c.RouteByModel && modelConfig.Provider != "" {
 		requestAPIKey = apiKeyForProvider(requestProvider)
-		if requestAPIKey == "" {
+		if requestAPIKey == "" && config.KeyName != "" {
 			return nil, fmt.Errorf("%s not set in config.toml for model %q", config.KeyName, req.Model)
 		}
 	}
@@ -413,7 +440,11 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, erro
 	// log later reflects what the user actually waits for, including TTFT.
 	startedAt := time.Now()
 
-	resp, err := c.HTTP.Do(httpReq)
+	httpClient := c.HTTP
+	if config.Transport != nil {
+		httpClient = &http.Client{Timeout: requestTimeout, Transport: config.Transport}
+	}
+	resp, err := httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("%s http: %w", requestProvider, err)
 	}

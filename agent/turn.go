@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"app/core"
+	"genix-agent/llm"
 	"genix-agent/routing"
 )
 
@@ -126,6 +127,8 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 	runContext = core.WithCreditRateLimitIdentity(
 		runContext, req.User.CompanyID, req.User.ID, req.RouteID,
 	)
+	// A turn on a local model (planner or execution) shows its progress bar in the chat.
+	runContext = llm.WithLocalProgress(runContext, session.pushProgress)
 
 	core.Log("agent.turn start tab::", shortTabID(tab), " company::", session.CompanyID, " user::", session.UserID,
 		" session::", session.SessionID, " mode::", turnRequest.ModeID, " path::", turnRequest.Path, " bridged::", BridgeEnabled())

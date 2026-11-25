@@ -101,7 +101,7 @@ dimensions = 4096
 [providers]
 backend = "none"        # aws | cloudflare | none  — espejo de datos: DynamoDB, D1 o ninguno
 cdn     = "aws"         # aws | cloudflare         — object storage y origen público de assets
-model   = "openrouter"  # meta | openrouter        — LLM del agente; sólo se exige su key
+model   = "openrouter"  # meta | openrouter | local — LLM del agente; sólo se exige su key
 
 # ─── Database ────────────────────────────────────────────────────────────────
 [db]
@@ -393,6 +393,9 @@ classifier_provider = ""
 classifier_model = ""
 meta_key         = ""
 openrouter_key   = ""
+# llama-server for the provider = "local" models (genix-local-ai over the tailnet), e.g.
+# "http://100.64.0.4:8080/v1". No key. Its streamed timings feed the chat's progress bar.
+local_model_url  = ""
 # Port of the agent server (genix/agent) when it runs outside Lambda. 0/omitted = 3590.
 port             = 3590
 
@@ -485,6 +488,10 @@ id        = "poolside/laguna-s-2.1"
 provider  = "openrouter"
 reasoning = { effort = "medium", exclude = true }
 routing   = { sort = "throughput" }
+
+# [[models]]
+# id       = "genix-bot"   # llama-server serves one model and accepts any id
+# provider = "local"
 
 [[models]]
 id        = "deepseek/deepseek-v4-flash-0731"

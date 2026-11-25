@@ -60,12 +60,17 @@ func ChatModel(ctx context.Context, modelID string) (model.ToolCallingChatModel,
 		return nil, fmt.Errorf("model %q: %w", modelID, err)
 	}
 
+	var transport http.RoundTripper = headerTransport{headers: headers}
+	if provider == llm.ProviderLocal {
+		// llama-server streams its progress to the chat while the model stays non-streaming here.
+		transport = llm.LocalStreamTransport{}
+	}
 	config := &openai.ChatModelConfig{
 		APIKey:     apiKey,
 		BaseURL:    baseURL,
 		Model:      modelID,
 		Timeout:    llm.RequestTimeout,
-		HTTPClient: &http.Client{Timeout: llm.RequestTimeout, Transport: headerTransport{headers: headers}},
+		HTTPClient: &http.Client{Timeout: llm.RequestTimeout, Transport: transport},
 	}
 	if provider == llm.ProviderMeta {
 		if modelConfig.Reasoning != nil {

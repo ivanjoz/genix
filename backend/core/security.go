@@ -162,6 +162,9 @@ type EnvStruct struct {
 	MODEL_PROVIDER string
 	META_KEY       string
 	OPENROUTER_KEY string
+	// LOCAL_MODEL_URL is the OpenAI-compatible base URL (".../v1") of the llama-server that serves
+	// the provider = "local" models, e.g. genix-local-ai's server over the tailnet. It takes no key.
+	LOCAL_MODEL_URL string
 	// DEFAULT_MODEL overrides the model used when a request carries no explicit
 	// one. It must name a registered model. Blank = the first MODELS entry.
 	DEFAULT_MODEL string
@@ -236,7 +239,7 @@ type EnvStruct struct {
 // son los del contrato del upstream para que la traducción en llm sea campo a campo.
 type ModelEntry struct {
 	ID       string `toml:"id"`
-	Provider string `toml:"provider"` // "meta" | "openrouter"; vacío = openrouter
+	Provider string `toml:"provider"` // "meta" | "openrouter" | "local"; vacío = openrouter
 	// Reasoning nulo = el modelo no razona: llm omite el parámetro en la petición, porque
 	// enviarlo a un modelo sin razonamiento es un campo desconocido para el upstream.
 	Reasoning *ModelReasoning `toml:"reasoning"`
@@ -399,6 +402,7 @@ type fileConfig struct {
 		ClassifierProvider string `toml:"classifier_provider"`
 		MetaKey            string `toml:"meta_key"`
 		OpenRouterKey      string `toml:"openrouter_key"`
+		LocalModelURL      string `toml:"local_model_url"`
 		Port               int32  `toml:"port"`
 	} `toml:"agent"`
 
@@ -633,6 +637,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	}
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
+	env.LOCAL_MODEL_URL = strings.TrimSpace(file.Agent.LocalModelURL)
 	env.AGENT_PORT = file.Agent.Port
 	env.MODELS = file.Models
 	// env.IS_DEV_ARG, not a config field: PopulateVariables sets it before this runs, precisely so
