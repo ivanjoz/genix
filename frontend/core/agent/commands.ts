@@ -6,6 +6,7 @@
 
 import { goto } from "$app/navigation";
 import { Modules, canOpenRoute } from "#core/modules.svelte.ts";
+import { fetchOnCourse } from "#core/store.svelte.ts";
 import { tick } from "svelte";
 import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "#components/agent/registry.ts";
 import { captureDomScreenshot, captureScreenshot, releaseScreenStream } from "./screenshot";
@@ -92,10 +93,27 @@ const pacedRun = async <T>(fn: () => Promise<T> | T): Promise<T> => {
   }
 };
 
+// A page loads its data after it mounts (chart summaries, lists from the delta cache): read it
+// before those requests end and the agent sees "0 productos" on a page that has 427. Wait until
+// no request of the http client is under way for REQUESTS_QUIET_MS, at most REQUESTS_MAX_WAIT_MS.
+const REQUESTS_QUIET_MS = 150;
+const REQUESTS_MAX_WAIT_MS = 5000;
+
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
 const waitForPageContentReady = async () => {
   // Capture only after Svelte state and route DOM updates have reached the document.
   await tick();
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await nextFrame();
+  const deadline = Date.now() + REQUESTS_MAX_WAIT_MS;
+  let quietSince = Date.now();
+  while (Date.now() < deadline) {
+    if (fetchOnCourse.size > 0) { quietSince = Date.now(); }
+    else if (Date.now() - quietSince >= REQUESTS_QUIET_MS) { break; }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  await tick();
+  await nextFrame();
 };
 
 // --- Pulse overlay ------------------------------------------------------------
