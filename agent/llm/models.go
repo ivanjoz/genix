@@ -41,6 +41,9 @@ type ModelConfig struct {
 	// model. Nil = let OpenRouter choose. Meaningless for Meta models, which the
 	// provider serves itself.
 	Routing *OpenRouterRouting
+	// Contract names the turn runtime the model was trained for: "" is Genix's agent loop,
+	// "genix-bot" the fine-tuned model's own (agent/genixbot).
+	Contract string
 	// Hash is the short base36 ID the frontend sends instead of the full model id.
 	Hash string
 	// IsDefault marks the model the backend falls back to when a request
@@ -74,6 +77,7 @@ func configuredModels() []ModelConfig {
 			Provider:  provider,
 			Reasoning: reasoningFromConfig(entry.Reasoning),
 			Routing:   routingFromConfig(entry.Routing),
+			Contract:  strings.TrimSpace(entry.Contract),
 			Hash:      ModelIDHash(strings.TrimSpace(entry.ID)),
 		})
 	}

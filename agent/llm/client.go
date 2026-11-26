@@ -205,6 +205,10 @@ type ChatRequest struct {
 	// https://openrouter.ai/docs/features/provider-routing. Dropped on Meta,
 	// which serves its own models and has no routing concept.
 	Routing *OpenRouterRouting `json:"provider" cb:"provider,9"`
+	// TopK and Samplers are llama-server's sampler chain. genix-bot decodes greedily with no
+	// repetition penalties (samplers ["top_k"], top_k 1): the default chain drops tool arguments.
+	TopK     int      `json:"top_k,omitempty" cb:"top_k,10"`
+	Samplers []string `json:"samplers,omitempty" cb:"samplers,11"`
 }
 
 // OpenRouterRouting mirrors the subset of OpenRouter's `provider` parameter we

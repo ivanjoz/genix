@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"app/core"
+	"genix-agent/genixbot"
 	"genix-agent/harness"
 	"genix-agent/llm"
 	"genix-agent/pagebuilder"
@@ -218,6 +219,12 @@ func (s *AgentSession) RunUserMessage(ctx context.Context, msg ChatUserMessage) 
 		return errors.New("empty message")
 	}
 	core.Log("agent.chat userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash, " mode::", msg.ModeID, " surface::", msg.Surface.Kind, " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
+	// A genix-bot model runs its own turn: no planner, no execution prompt (genixbot_turn.go).
+	if modelID, err := harness.ResolveModelID(msg.ModelHash); err == nil {
+		if modelConfig := llm.LookupModel(modelID); modelConfig.Contract == genixbot.ContractName {
+			return s.runGenixBotTurn(ctx, modelConfig, text)
+		}
+	}
 	return s.runDiscoveryTurn(ctx, msg, text)
 }
 

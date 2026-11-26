@@ -396,6 +396,9 @@ openrouter_key   = ""
 # llama-server for the provider = "local" models (genix-local-ai over the tailnet), e.g.
 # "http://100.64.0.4:8080/v1". No key. Its streamed timings feed the chat's progress bar.
 local_model_url  = ""
+# `hechos` search of the contract = "genix-bot" models (genix-local-ai docindex/serve.ts over the
+# tailnet), e.g. "http://100.64.0.4:8080/hechos". No key.
+local_facts_url  = ""
 # Port of the agent server (genix/agent) when it runs outside Lambda. 0/omitted = 3590.
 port             = 3590
 
@@ -492,6 +495,7 @@ routing   = { sort = "throughput" }
 # [[models]]
 # id       = "genix-bot"   # llama-server serves one model and accepts any id
 # provider = "local"
+# contract = "genix-bot"   # its own turn (agent/genixbot): no planner, no execution prompt
 
 [[models]]
 id        = "deepseek/deepseek-v4-flash-0731"
