@@ -285,7 +285,7 @@ func (r *renderer) collapsesInFocus(n *node) bool {
 func backgroundSummary(n *node) string {
 	parts := []string{}
 	for _, table := range findAll(n, "Table") {
-		parts = append(parts, fmt.Sprintf("Table %s (%d filas)", table.attrs["id"], len(findAll(table, "Row"))))
+		parts = append(parts, fmt.Sprintf("Table %s (%d filas)", table.attrs["id"], len(tableRows(table))))
 	}
 	if len(parts) == 0 {
 		return ""
@@ -333,12 +333,7 @@ func (r *renderer) renderPlainTable(n *node, depth int) {
 		headers = append(headers, escapeCell(cleanText(innerText(th))))
 	}
 	r.emit(depth, "Table | "+strings.Join(headers, " | "))
-	bodyRows := []*node{}
-	for _, tr := range findAll(n, "tr") {
-		if cells := directCells(tr); len(cells) > 0 && cells[0].tag != "th" {
-			bodyRows = append(bodyRows, tr)
-		}
-	}
+	bodyRows := tableRows(n)
 	rows := 0
 	for _, tr := range bodyRows {
 		cells := directCells(tr)
@@ -388,7 +383,7 @@ func (r *renderer) renderTable(n *node, depth int) {
 	}
 	r.emit(depth, line)
 
-	rows := findAll(n, "Row")
+	rows := tableRows(n)
 	for index, row := range rows {
 		if index == r.options.MaxRows {
 			r.emit(depth+1, fmt.Sprintf("More | +%d filas", len(rows)-index))
@@ -398,7 +393,10 @@ func (r *renderer) renderTable(n *node, depth int) {
 		for _, cell := range directCells(row) {
 			cells = append(cells, renderCell(cell))
 		}
-		rowLine := "Row " + row.attrs["id"]
+		rowLine := "Row"
+		if row.tag == "Row" {
+			rowLine += " " + row.attrs["id"]
+		}
 		if _, selected := row.attrs["selected"]; selected {
 			rowLine += " *"
 		}
@@ -407,6 +405,21 @@ func (r *renderer) renderTable(n *node, depth int) {
 	if len(rows) == 0 {
 		r.emit(depth+1, "Text | sin filas")
 	}
+}
+
+// tableRows: the registered Row components, or the body rows of a table whose rows are not registered
+// (an editable grid: its cells are the components, `{CellInput 158:102 = "x"}`).
+func tableRows(n *node) []*node {
+	if rows := findAll(n, "Row"); len(rows) > 0 {
+		return rows
+	}
+	bodyRows := []*node{}
+	for _, tr := range findAll(n, "tr") {
+		if cells := directCells(tr); len(cells) > 0 && cells[0].tag != "th" {
+			bodyRows = append(bodyRows, tr)
+		}
+	}
+	return bodyRows
 }
 
 // renderCell shows plain text, or the editable component inside the cell.

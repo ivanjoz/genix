@@ -119,3 +119,18 @@ func TestMethods(t *testing.T) {
 		}
 	}
 }
+
+// An editable grid registers its cells, not its rows: the rows still print, without an id.
+func TestRenderEditableGridRows(t *testing.T) {
+	snapshot := `<div><Table id="158"><table><thead><tr><th>#</th><th>Vence</th><th>Total</th><th></th></tr></thead><tbody>
+<tr><td>1</td><td><CellInput id="158:102" value="01-01-2027" type="text" methods="setValue"/></td><td>3,499.09</td><td><Button id="159" label="Removes the installment." methods="click"/></td></tr>
+</tbody></table></Table></div>`
+	got, err := Render(snapshot, "", Options{Route: "/finance/loans"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Page /finance/loans\nTable 158 | # | Vence | Total | \n Row | 1 | {CellInput 158:102 = \"01-01-2027\"} | 3,499.09 | {Button 159}\n"
+	if got != want {
+		t.Fatalf("render\n got:\n%q\nwant:\n%q", got, want)
+	}
+}
