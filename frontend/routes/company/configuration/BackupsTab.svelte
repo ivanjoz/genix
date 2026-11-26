@@ -77,11 +77,11 @@ import { Env } from '#core/env.ts';
     <div class="flex items-center justify-between mb-6" aria-label="Backups toolbar with generate and upload buttons">
       <div class="h2 ff-bold">Backups</div>
       <div class="flex items-center">
-        <Button color="green" icon="icon-[fa--plus]" label="Generates a new database backup snapshot." css="mr-8" onClick={async () => {
+        <Button color="green" icon="icon-[fa--plus]" label="Generates a new database backup snapshot.|Generar un backup nuevo de la base de datos." css="mr-8" onClick={async () => {
           const confirmed = await confirmWarn({ title: tr("Generate Backup|Generar Backup"), message: tr("Do you want to generate the backup now?|¿Desea generar el backup ahora?") })
           if (confirmed) { generarBackup() }
         }} />
-        <Button color="blue" icon="icon-[fa--upload]" label="Opens dialog to upload an existing backup file." />
+        <Button color="blue" icon="icon-[fa--upload]" label="Opens dialog to upload an existing backup file.|Abrir la carga de un archivo de backup existente." />
       </div>
     </div>
     <VTable

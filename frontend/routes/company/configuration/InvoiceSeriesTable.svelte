@@ -173,7 +173,7 @@ import type { ICompany } from './empresas.svelte';
     <!-- No `name`: the Button renders icon-only, and `label` is what the agent
          registry and screen readers read. -->
     <Button color="green" icon="icon-[fa--plus]"
-      label="Opens the dialog that adds an invoicing series."
+      label="Opens the dialog that adds an invoicing series.|Abrir el formulario para agregar una serie de facturación."
       onClick={openNewSeries} />
   </div>
 

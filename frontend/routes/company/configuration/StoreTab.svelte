@@ -9,7 +9,7 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
 </script>
 
 <div class="flex justify-end items-center mb-8" aria-label="Store configuration header with save button">
-  <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves the online store configuration." onClick={() => saveCompanyParameters(service.empresa)} />
+  <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves the online store configuration.|Guardar la configuración de la tienda en línea." onClick={() => saveCompanyParameters(service.empresa)} />
 </div>
 <div class="grid grid-cols-24 gap-14">
   <section class="col-span-24 rounded-[12px] border border-line bg-surface p-16 shadow-sm"

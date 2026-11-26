@@ -420,7 +420,7 @@ const onDispose = async () => {
           {#if canEditAsset(selectedAsset)}
             <Button color="purple" icon="icon-[fa--pencil]"
               name="Edit|Editar"
-              label="Opens the dialog to correct this asset's acquisition data."
+              label="Opens the dialog to correct this asset's acquisition data.|Abrir el formulario para corregir los datos de adquisición del activo."
               onClick={openAssetEditModal}
             />
           {/if}
@@ -433,7 +433,7 @@ const onDispose = async () => {
           {/if}
           {#if canDisposeAsset(selectedAsset)}
             <Button name="Dispose|Dar de Baja"
-              label="Disposes the asset: removes it from the warehouse and stops its depreciation."
+              label="Disposes the asset: removes it from the warehouse and stops its depreciation.|Dar de baja el activo: sale del almacén y deja de depreciarse."
               color="red"
               icon="icon-[fa--trash]"
               onClick={onDispose}

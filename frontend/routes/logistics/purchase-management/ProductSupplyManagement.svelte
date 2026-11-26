@@ -670,7 +670,7 @@ import {
   <div class="mt-16" aria-label="Product suppliers configuration list">
     <div class="mb-8 flex items-center justify-between">
       <div class="h4 ff-bold">Proveedores</div>
-      <Button color="green" icon="icon-[fa--plus]" label="Adds a new provider row to the supply configuration for this product." css="h-32 px-10"
+      <Button color="green" icon="icon-[fa--plus]" label="Adds a new provider row to the supply configuration for this product.|Agregar un proveedor al abastecimiento de este producto." css="h-32 px-10"
         onClick={addProviderSupplyRow} />
     </div>
 

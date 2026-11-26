@@ -105,7 +105,7 @@ import {
       </div>
     </div>
     <Button color="purple" icon="icon-[fa--plug]" name="Test|Probar"
-      label="Checks the credentials against SUNAT without issuing any document."
+      label="Checks the credentials against SUNAT without issuing any document.|Probar las credenciales con SUNAT sin emitir ningún documento."
       disabled={!current?.HasCert} onClick={testSecrets} />
   </div>
 
@@ -171,7 +171,7 @@ import {
 
     <div class="col-span-24 flex justify-end">
       <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar"
-        label="Saves the SUNAT credentials and uploads the certificate."
+        label="Saves the SUNAT credentials and uploads the certificate.|Guardar las credenciales SUNAT y subir el certificado."
         disabled={isSaving} onClick={saveSecrets} />
     </div>
   </div>
