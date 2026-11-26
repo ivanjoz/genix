@@ -41,3 +41,12 @@ func (action Action) String() string {
 	}
 	return line
 }
+
+// Action errors as the model reads them. Genix's browser adapter (agent/genixbot_turn.go) and the
+// training simulator (genix-local-ai simpage) both use these, so training shows the texts Genix sends.
+const ErrorUnknownID = "el id no está en la página"
+
+// ErrorNoMethod: the component exists but has no such method (setValue on a Checkbox).
+func ErrorNoMethod(componentType, method string) string {
+	return componentType + " no tiene el método " + method
+}

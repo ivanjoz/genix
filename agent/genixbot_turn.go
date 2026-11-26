@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -163,7 +164,7 @@ func (page *genixBotPage) Invoke(ctx context.Context, actions []genixbot.Action)
 	}
 	results := make([]genixbot.ActionResult, len(batch.Results))
 	for index, invocation := range batch.Results {
-		results[index] = genixbot.ActionResult{Error: invocation.Error, Value: optionsText(invocation.Value)}
+		results[index] = genixbot.ActionResult{Error: actionError(invocation.Error), Value: optionsText(invocation.Value)}
 		if !invocation.OK && invocation.Error == "" {
 			results[index].Error = "la acción falló"
 		}
@@ -173,6 +174,23 @@ func (page *genixBotPage) Invoke(ctx context.Context, actions []genixbot.Action)
 	}
 	pageOutline, err := genixBotOutline(*batch.Page, page.session.CurrentRoute())
 	return results, pageOutline, err
+}
+
+var (
+	unknownHandlePattern = regexp.MustCompile(`^unknown handle id: `)
+	missingMethodPattern = regexp.MustCompile(`^handle \S+ \((\w+)\) does not implement (\w+)$`)
+)
+
+// actionError words the browser's generic failures the way genix-bot was trained to read them;
+// component-specific errors pass through.
+func actionError(browserError string) string {
+	if unknownHandlePattern.MatchString(browserError) {
+		return genixbot.ErrorUnknownID
+	}
+	if match := missingMethodPattern.FindStringSubmatch(browserError); match != nil {
+		return genixbot.ErrorNoMethod(match[1], match[2])
+	}
+	return browserError
 }
 
 // genixBotArguments turns a `hacer` argument into the component method's arguments: option ids are

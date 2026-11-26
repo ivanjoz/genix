@@ -807,3 +807,21 @@ func atoiOrOne(value string) int {
 	}
 	return number
 }
+
+var methodsSuffix = regexp.MustCompile(`\{([a-zA-Z,]+)\}$`)
+
+// Methods lists what a rendered outline line's component accepts: its printed `{m1,m2}` or its
+// type's defaults.
+func Methods(line string) []string {
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return nil
+	}
+	if match := methodsSuffix.FindStringSubmatch(strings.TrimSpace(line)); match != nil {
+		return strings.Split(match[1], ",")
+	}
+	if defaults := defaultMethods[fields[0]]; defaults != "" {
+		return strings.Split(defaults, ",")
+	}
+	return nil
+}
