@@ -113,9 +113,9 @@
         keyId="id" keyName="name" css="w-260" notEmpty={true} label="" placeholder="Site|Sede" />
       <Checkbox bind:saveOn={viewOptions} save="includeForecast" label="Include forecast|Incluir pronóstico" />
       <Button color={highWarningsCount ? 'red' : 'blue'} mode="subtle" icon="icon-[fa--exclamation-triangle]"
-        name={`${warnings.length} ${tr('warnings|alertas')}`} label="Opens what the forecast had to assume."
+        name={`${warnings.length} ${tr('warnings|alertas')}`} label="Opens what the forecast had to assume.|Abrir los supuestos de la proyección."
         onClick={() => ui.openSideLayer(WARNINGS_LAYER_ID)} />
-      <Button mode="subtle" icon="icon-[fa--refresh]" label="Recomputes the commitments and the forecast." onClick={() => cashFlow.load()} />
+      <Button mode="subtle" icon="icon-[fa--refresh]" label="Recomputes the commitments and the forecast.|Recalcular los compromisos y la proyección." onClick={() => cashFlow.load()} />
       {#if cashFlow.forecastStatus === 'loading' || cashFlow.forecastStatus === 'fitting'}
         <span class="text-fg-muted">{tr('Forecasting...|Pronosticando...')}</span>
       {:else if cashFlow.forecastStatus === 'error'}

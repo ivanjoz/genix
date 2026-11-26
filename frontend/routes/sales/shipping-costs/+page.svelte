@@ -389,7 +389,7 @@
           css="w-240"
         />
         <Button color="purple" icon="icon-[fa--floppy-o]" name="Save|Guardar"
-          label="Saves all edited shipping cost records to the server."
+          label="Saves all edited shipping cost records to the server.|Guardar los costos de envío editados."
           onClick={saveDeliveryCosts} />
       </div>
       <div class="flex-1 min-h-0 overflow-auto">

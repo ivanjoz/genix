@@ -29,7 +29,7 @@ import { saveCompanyParameters, type EmpresaParametrosService } from './empresas
     <!-- The same record and the same endpoint as the parameters form beside it, so either Save
          writes both panels. It is repeated here because this is where the flags are edited. -->
     <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar"
-      label="Saves the checked flags on the company."
+      label="Saves the checked flags on the company.|Guardar las opciones marcadas de la empresa."
       onClick={() => saveCompanyParameters(service.empresa)} />
   </div>
   <div class="text-fg-muted mb-14">

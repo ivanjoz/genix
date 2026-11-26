@@ -100,11 +100,11 @@
           <SearchSelect saveOn={menuPicker} save="MenuID" css="flex-1 min-w-0" label="Menu|Carta"
             options={menusService.records} keyId="ID" keyName="Name" placeholder=":: seleccione ::"
             onChange={() => { void openMenu(menuPicker.MenuID) }} />
-          <Button color="green" icon="icon-[fa--plus]" label="Starts a new menu." onClick={startNewMenu} />
+          <Button color="green" icon="icon-[fa--plus]" label="Starts a new menu.|Crear un menú nuevo." onClick={startNewMenu} />
         </div>
         {#if builder.draft}
           <div class="flex gap-8">
-            <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves the menu." css="flex-1"
+            <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves the menu.|Guardar el menú." css="flex-1"
               disabled={isSaving} onClick={saveMenu} />
             {#if builder.draft.ID}
               <Button color="red" mode="subtle" icon="icon-[fa--trash]" label="Deletes this menu." disabled={isSaving} onClick={deleteMenu} />

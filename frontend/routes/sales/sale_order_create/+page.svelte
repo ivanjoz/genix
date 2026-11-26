@@ -634,7 +634,7 @@ import {
           </div>
         </div>
           <Button color="blue" icon="icon-[fa--floppy-o]" name="Generar" hideNameOnMobile
-            css="shrink-0" label="Saves the current sale order and generates it in the system." onClick={handlePostSaleOrder} />
+            css="shrink-0" label="Saves the current sale order and generates it in the system.|Guardar y generar el pedido de venta." onClick={handlePostSaleOrder} />
         </div>
         <!-- Every row below shares the same 12-column grid so the left column (actions, client mode,
              document) and the right column (caja/due date, client name) line up across rows. -->

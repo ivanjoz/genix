@@ -482,7 +482,7 @@ const formatDateOrDash = (value: string | number) => {
         </div>
       </div>
       <Button color="blue" icon="icon-[fa--floppy-o]" name="Generate|Generar" hideNameOnMobile
-        css="shrink-0" label="Saves and submits the current purchase order to the system." onClick={handleSave} />
+        css="shrink-0" label="Saves and submits the current purchase order to the system.|Guardar y enviar la orden de compra." onClick={handleSave} />
     </div>
 
     <div class="px-12 pt-4 mb-4 flex items-center justify-between gap-12">

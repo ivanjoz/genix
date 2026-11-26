@@ -291,7 +291,7 @@
 					<Button
 						color="green"
 						icon="icon-[fa--plus]"
-						label="Opens the modal to create a new cash register (caja)."
+						label="Opens the modal to create a new cash register (caja).|Abrir el formulario para crear una caja."
 						onClick={(ev) => {
 							cajaForm = { ID: -1, ss: 1, CurrencyType: 1 } as ICashBank;
 							ui.openModal(1);
@@ -355,7 +355,7 @@
 								<Button
 									color="green"
 									icon="icon-[fa--plus]"
-									label="Opens the modal to add a new cash movement."
+									label="Opens the modal to add a new cash movement.|Abrir el formulario para agregar un movimiento de caja."
 									onClick={() => {
 										ui.openModal(3);
 										cajaMovimientoForm = {

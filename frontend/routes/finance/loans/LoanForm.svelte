@@ -81,7 +81,7 @@
       css="col-span-12 md:col-span-6" />
     <div class="col-span-12 md:col-span-4 flex items-end">
       <Button color="blue" icon="icon-[fa--calculator]" name="Calculate|Calcular"
-        label="Proposes the installments from the amount, TEA, method and grace." onClick={proposeSchedule} />
+        label="Proposes the installments from the amount, TEA, method and grace.|Proponer las cuotas según monto, TEA, método y gracia." onClick={proposeSchedule} />
     </div>
   </div>
   <div class="text-fg-muted mt-8">

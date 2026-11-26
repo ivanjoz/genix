@@ -267,7 +267,7 @@ import {
     <div class="flex items-center justify-between mb-6" aria-label="Sedes list toolbar with search filter and create button">
       <FilterInput bind:value={filterText} css="mr-16 w-256" />
       <div class="flex items-center">
-        <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new business location (sede)." onClick={() => {
+        <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new business location (sede).|Abrir el formulario para crear una sede." onClick={() => {
           sedeForm = { ss: 1 } as ISite
           ui.openModal(1)
         }} />

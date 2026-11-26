@@ -66,7 +66,7 @@
 				edgeMargin={0} buttonClassOnShow="bx-red"
 				layerClass="w-600"
 				icon="icon-[fa--search]" iconOnShow="icon-[fa--close]"
-				label="Opens the search filter for the sales report."
+				label="Opens the search filter for the sales report.|Abrir el filtro de búsqueda del reporte de ventas."
 			>
 				<div class="w-full grid grid-cols-24 gap-12 p-12" aria-label="Sales report filter with date range, client, product, and status">
 			    <DateInput

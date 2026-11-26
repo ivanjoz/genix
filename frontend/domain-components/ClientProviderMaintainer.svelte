@@ -30,6 +30,8 @@
   }
 
   const { clientProviderType, pageTitle, layerTitleSingular }: IClientProvidersViewProps = $props()
+  // The create button's label pairs both halves: "Client|Cliente" → client / cliente.
+  const [singularEnglish, singularSpanish] = layerTitleSingular.toLowerCase().split('|')
 
   let clientProviderService = $state<ClientProviderService | null>(null)
   const paisCiudadesService = new CountryCitiesService(true)
@@ -275,7 +277,7 @@
             {filteredClientProviders.length} <T text="records|registros" />
           </div>
           <Button color="green" icon="icon-[fa--plus]" name="New|Nuevo" hideNameOnMobile
-            label={`Opens the side layer to create a new ${layerTitleSingular.toLowerCase()}.`}
+            label={`Opens the side layer to create a new ${singularEnglish}.|Abrir el panel para crear un ${singularSpanish}.`}
             onClick={openCreateClientProviderLayer} />
         </div>
       </div>

@@ -5,6 +5,7 @@
   import Layer from '#components/layers/Layer.svelte';
   import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
   import SearchSelect from '#components/form/SearchSelect.svelte';
+  import Button from '#components/buttons/Button.svelte';
   import LoadingBar from '#components/misc/LoadingBar.svelte';
   import RecordByIDText from '#components/misc/RecordByIDText.svelte';
   import VTable from '#components/vTable/VTable.svelte';
@@ -673,17 +674,8 @@
     {#snippet titleSide()}
       {#if selectedSaleOrder && canAnnulSaleOrders && !isSaleOrderAnnulled(selectedSaleOrder)}
      	<div class="flex items-center">
-	       <button
-	         class="w-30 h-30 text-sm rounded-full bg-red-bg-strong text-red-fg fx-c"
-	         type="button"
-	         title={tr("Annul order|Anular pedido")}
-	         aria-label="Annul this sale order"
-	         onclick={() => {
-	           openAnnulForm();
-	         }}
-	       >
-	         <i class="icon-[fa--trash]"></i>
-	       </button>
+	       <Button label="Annul order|Anular pedido" icon="icon-[fa--trash]" color="red" height="tiny" useCircle
+	         onClick={() => { openAnnulForm(); }} />
       </div>
       {/if}
     {/snippet}
@@ -784,16 +776,10 @@
                   label="Cash Register for Payment|Caja para Pago"
                   placeholder=":: seleccione ::"
                 />
-                <button class={`bx-green justify-center w-[50%] h-36 ${!canPaySaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
+                <Button name="Pay|Pagar" label="Pay|Pagar" icon="icon-[fa--check]" color="green"
+                  css={`justify-center w-[50%] ${!canPaySaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
                   disabled={!canPaySaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
-                  aria-label="Process payment for this sale order"
-                  onclick={() => {
-                    onClickPagar();
-                  }}
-                >
-                  <i class="icon-[fa--check]"></i>
-                  <span class="mr-12"><T text="Pay|Pagar" /></span>
-                </button>
+                  onClick={() => { onClickPagar(); }} />
               {:else}
                 <div class="text-13 leading-20 text-fg-soft">
                   <span class="ff-bold text-xs color-label mr-2"><T text="Paid on:|Pagado el:" /></span> {formatActionTime(selectedSaleOrder.LastPaymentTime)}.<br>
@@ -817,16 +803,10 @@
                   placeholder=":: seleccione ::"
                 />
                 <div class="flex items-center">
-                  <button class={`w-[50%] justify-center bx-blue h-36 ${!canDeliverSaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
+                  <Button name="Deliver|Entregar" label="Deliver|Entregar" icon="icon-[fa--truck]" color="blue"
+                    css={`justify-center w-[50%] ${!canDeliverSaleOrder(selectedSaleOrder) ? 'opacity-60' : ''}`}
                     disabled={!canDeliverSaleOrder(selectedSaleOrder) || isPostingSaleOrderAction}
-                    aria-label="Mark this sale order as delivered from the selected warehouse"
-                    onclick={() => {
-                      onClickEntregar();
-                    }}
-                  >
-                    <i class="icon-[fa--truck]"></i>
-                    <span><T text="Deliver|Entregar" /></span>
-                  </button>
+                    onClick={() => { onClickEntregar(); }} />
                 </div>
               {:else}
                 <div class="text-13 leading-20 text-fg-soft">

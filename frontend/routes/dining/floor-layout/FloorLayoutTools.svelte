@@ -42,9 +42,9 @@
     <NumericSlider saveOn={editor} save="cellSize" min={MIN_CELL_SIZE} max={MAX_CELL_SIZE} step={2} referenceWidth={170}
       label="Zoom|Zoom" suffix="px" scaleLabels={[MIN_CELL_SIZE, 16, MAX_CELL_SIZE]} />
     <div class="flex items-center gap-8 shrink-0" aria-label="Undo and redo">
-      <Button icon="icon-[fa--undo]" label="Undoes the last change (Ctrl+Z)." height="compact" color="blue" mode="white"
+      <Button icon="icon-[fa--undo]" label="Undoes the last change (Ctrl+Z).|Deshacer el último cambio (Ctrl+Z)." height="compact" color="blue" mode="white"
         disabled={!editor.canUndo} onClick={() => editor.undo()} />
-      <Button icon="icon-[fa--repeat]" label="Redoes the undone change (Ctrl+Y)." height="compact" color="blue" mode="white"
+      <Button icon="icon-[fa--repeat]" label="Redoes the undone change (Ctrl+Y).|Rehacer el cambio deshecho (Ctrl+Y)." height="compact" color="blue" mode="white"
         disabled={!editor.canRedo} onClick={() => editor.redo()} />
     </div>
   </div>

@@ -198,7 +198,7 @@ import { formatTime } from '#libs/helpers.ts';
           <FilterInput bind:value={filterText} css="w-256" />
         </div>
         <div class="flex items-center">
-          <Button color="green" icon="icon-[fa--plus]" label="Opens the side layer to create a new user."
+          <Button color="green" icon="icon-[fa--plus]" label="Opens the side layer to create a new user.|Abrir el panel para crear un usuario."
             onClick={openCreateUsuarioLayer} />
         </div>
       </div>

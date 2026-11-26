@@ -124,7 +124,7 @@
     <div class="flex items-center justify-between mb-8">
       <FilterInput bind:value={filterText} css="w-256" />
       <Button color="green" icon="icon-[fa--plus]" name="New loan|Nuevo préstamo"
-        label="Opens the form to register a loan and its installments." onClick={() => openLoan()} />
+        label="Opens the form to register a loan and its installments.|Abrir el formulario para registrar un préstamo y sus cuotas." onClick={() => openLoan()} />
     </div>
     <Layer type="content">
       <VTable css="w-full" maxHeight="calc(100vh - 13rem)" {columns} data={loansService.loans}

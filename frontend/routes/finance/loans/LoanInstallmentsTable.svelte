@@ -69,7 +69,7 @@
     {tr('Principal of the installments|Capital de las cuotas')}: {formatN(principalsTotal / 100, 2)}
     / {formatN((loan.Principal || 0) / 100, 2)}
   </div>
-  <Button color="green" icon="icon-[fa--plus]" name="Installment|Cuota" label="Adds an empty installment a month after the last one."
+  <Button color="green" icon="icon-[fa--plus]" name="Installment|Cuota" label="Adds an empty installment a month after the last one.|Agregar una cuota vacía un mes después de la última."
     onClick={addInstallment} />
 </div>
 <VTable {columns} data={loan.Installments} disableVirtualizer={true} estimateSize={42} css="w-full"
@@ -84,7 +84,7 @@
             label={`Pays installment ${installment.Number}.`} onClick={() => onPay(installment)} />
         {/if}
         {#if installment.PaidAmount === 0}
-          <Button color="red" mode="subtle" useCircle height="tiny" icon="icon-[mdi--delete]" label="Removes the installment."
+          <Button color="red" mode="subtle" useCircle height="tiny" icon="icon-[mdi--delete]" label="Removes the installment.|Eliminar la cuota."
             onClick={() => { loan.Installments = loan.Installments.filter((item) => item !== installment); renumber() }} />
         {/if}
       </div>

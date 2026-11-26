@@ -117,10 +117,10 @@
           <SearchSelect saveOn={layoutPicker} save="LayoutID" css="flex-1 min-w-0" label="Layout|Salón"
             options={layoutsService.records} keyId="ID" keyName="Name" placeholder=":: seleccione ::"
             onChange={() => { void openLayout(layoutPicker.LayoutID) }} />
-          <Button color="green" icon="icon-[fa--plus]" label="Starts drawing a new layout." onClick={startNewLayout} />
+          <Button color="green" icon="icon-[fa--plus]" label="Starts drawing a new layout.|Crear un plano nuevo." onClick={startNewLayout} />
         </div>
         {#if editor.draft}
-          <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves the whole layout." css="w-full"
+          <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves the whole layout.|Guardar el plano completo." css="w-full"
             disabled={isSaving} onClick={saveLayout} />
           <OptionsStrip selected={editorTab} useMobileGrid containerCss="w-full" buttonCss="flex-1 justify-center"
             options={[[TAB_DESIGN, 'Design|Diseño'], [TAB_SETTINGS, 'Settings|Parámetros']]}

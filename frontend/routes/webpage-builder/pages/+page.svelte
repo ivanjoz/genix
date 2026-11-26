@@ -114,7 +114,7 @@ import { useUI } from '@genix/ui';
       <FilterInput label="Filter pages|Filtrar páginas"
         css="w-full md:w-260" icon="icon-[fa--search]" bind:value={filterText}
       />
-      <Button name="New|Nuevo" label="Shows the form to create a new page."
+      <Button name="New|Nuevo" label="Shows the form to create a new page.|Abrir el formulario para crear una página."
         color="green" icon="icon-[fa--plus]" hideNameOnMobile css="ml-auto"
         onClick={newPage}
       />

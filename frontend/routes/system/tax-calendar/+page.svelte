@@ -67,7 +67,7 @@
       {tr('Due dates of the monthly obligations by the RUC last digit.|Vencimientos de las obligaciones mensuales por último dígito del RUC.')}
     </div>
     <Button color="green" icon="icon-[fa--plus]" name="New period|Nuevo periodo"
-      label="Opens the modal to transcribe the due dates of a tax period." onClick={() => openPeriod()} />
+      label="Opens the modal to transcribe the due dates of a tax period.|Abrir el formulario para transcribir los vencimientos de un periodo tributario." onClick={() => openPeriod()} />
   </div>
   <VTable {columns} data={taxCalendar.calendars} css="w-full" onRowClick={(calendar) => openPeriod(calendar)} />
 </Page>

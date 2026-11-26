@@ -499,10 +499,10 @@ import {
 	      css="mr-16 w-320 max-w-full" />
 	    <div class="flex items-center gap-8">
 	      <Button color="purple" icon="icon-[fa--download]" css="h-32 px-10" hideNameOnMobile
-	        label="Downloads the supply configuration of the listed products as an Excel file."
+	        label="Downloads the supply configuration of the listed products as an Excel file.|Descargar la configuración de abastecimiento de los productos listados en Excel."
 	        name="Export|Exportar" onClick={exportSupplyExcel} />
 	      <Button color="blue" icon="icon-[fa--upload]" css="h-32 px-10" hideNameOnMobile
-	        label="Opens the Excel import dialog to update the supply configuration in bulk."
+	        label="Opens the Excel import dialog to update the supply configuration in bulk.|Abrir la importación de Excel para actualizar el abastecimiento en bloque."
 	        name="Import|Importar" onClick={openImportSupplyModal} />
 	      <div class="h6 ff-bold pr-8 text-fg-muted">
 	        {filteredProductSupplyRows.length} registros

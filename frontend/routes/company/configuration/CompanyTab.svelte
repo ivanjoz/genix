@@ -31,7 +31,7 @@ import {
     <div class="flex items-center gap-10 mb-14">
       <div class="h3 ff-bold flex-1 min-w-0"><T text="Company Parameters|Parámetros de la Empresa" /></div>
       <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar"
-        label="Saves the company parameters on this panel."
+        label="Saves the company parameters on this panel.|Guardar los parámetros de la empresa."
         onClick={() => saveCompanyParameters(service.empresa)} />
     </div>
     <div class="grid grid-cols-24 gap-10 content-start">

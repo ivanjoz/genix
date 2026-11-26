@@ -595,13 +595,13 @@ import {
     />
 
     {#if view === 1}
-      <Button label="Opens the import modal to load products from an Excel file."
+      <Button label="Opens the import modal to load products from an Excel file.|Abrir la importación de productos desde un archivo Excel."
         color="blue"
         icon="icon-[fa--upload]"
         css="ml-auto mr-8 col-span-3"
         onClick={openImportProductosModal}
       />
-      <Button label="Exports the current product list to an Excel file for download."
+      <Button label="Exports the current product list to an Excel file for download.|Exportar la lista de productos a un archivo Excel."
         color="purple"
         icon="icon-[fa--download]"
         css="mr-8 col-span-3"
@@ -609,7 +609,7 @@ import {
       />
     {/if}
 
-    <Button name="New|Nuevo" label="Shows the form to create a new product in a side layer."
+    <Button name="New|Nuevo" label="Shows the form to create a new product in a side layer.|Abrir el formulario para crear un producto."
       color="green"
       icon="icon-[fa--plus]"
       hideNameOnMobile

@@ -220,7 +220,7 @@ import { SvelteMap } from 'svelte/reactivity';
         edgeMargin={0} buttonClassOnShow="bx-red"
         layerClass="w-560"
         icon="icon-[fa--search]" iconOnShow="icon-[fa--close]"
-        label="Opens the search filter for warehouse movements."
+        label="Opens the search filter for warehouse movements.|Abrir el filtro de búsqueda de movimientos de almacén."
       >
         <div class="w-full grid grid-cols-24 gap-12 p-12" aria-label="Warehouse movements search filter with date range, product, movement type, lot, and serial number">
           <SearchSelect

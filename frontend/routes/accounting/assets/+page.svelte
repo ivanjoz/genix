@@ -315,7 +315,7 @@ const onDispose = async () => {
       bind:value={filterText}
     />
     <Button name="Acquire|Adquirir"
-      label="Shows the form to register a new fixed asset."
+      label="Shows the form to register a new fixed asset.|Abrir el formulario para registrar un activo fijo."
       color="green"
       icon="icon-[fa--plus]"
       hideNameOnMobile
