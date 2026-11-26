@@ -383,6 +383,11 @@ func (r *renderer) renderTable(n *node, depth int) {
 		for _, th := range findAll(n, "th") {
 			headers = append(headers, cleanText(innerText(th)))
 		}
+		for _, header := range allDescendants(n) {
+			if header.attrs["role"] == "columnheader" {
+				headers = append(headers, cleanText(innerText(header)))
+			}
+		}
 	}
 	line := "Table " + tableID
 	if len(headers) > 0 {
@@ -434,6 +439,12 @@ func tableRows(n *node) []*node {
 	for _, tr := range findAll(n, "tr") {
 		if cells := directCells(tr); len(cells) > 0 && cells[0].tag != "th" {
 			bodyRows = append(bodyRows, tr)
+		}
+	}
+	// A div grid (genix-ui TableGrid: the exchange-rate calendar) marks its rows and cells by role.
+	for _, row := range allDescendants(n) {
+		if cells := directCells(row); row.tag != "tr" && row.attrs["role"] == "row" && len(cells) > 0 && cells[0].attrs["role"] != "columnheader" {
+			bodyRows = append(bodyRows, row)
 		}
 	}
 	return bodyRows
@@ -768,7 +779,7 @@ func allDescendants(n *node) []*node {
 func directCells(row *node) []*node {
 	cells := []*node{}
 	for _, child := range row.children {
-		if child.tag == "td" || child.tag == "th" {
+		if role := child.attrs["role"]; child.tag == "td" || child.tag == "th" || role == "cell" || role == "gridcell" || role == "columnheader" {
 			cells = append(cells, child)
 		}
 	}

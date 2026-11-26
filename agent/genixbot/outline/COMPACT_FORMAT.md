@@ -62,6 +62,7 @@ A line without an id cannot be acted on (text, read-only tables and their rows, 
 | Cell with a component | `{CellInput 75:101 = "x"}` |
 | Card grids | **5 cards** per group, then `More \| +N tarjetas` |
 | Unregistered table | `Table \| header \| …` with `Row \| …` rows and no ids |
+| Div grid (`role="row"` / `role="cell"`, genix-ui TableGrid) | read like a table: `columnheader` cells are the headers, each `row` a `Row` line |
 | Text | `Text \| …`; a long list of items splits into one `Text` line per item, capped at 5 |
 | Labels | Spanish half of `English\|Español`; `word\|palabra` inside an English sentence keeps the Spanish word; ` \| ` inside labels and cells becomes ` / ` |
 | **Focus mode** | while a floating layer is open (raw DOM `data-layer-id`), every container outside it collapses to `Type id \| en segundo plano: Table N (k filas)`; leaf components outside (buttons, filters) stay |

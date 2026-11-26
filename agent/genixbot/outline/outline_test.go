@@ -163,3 +163,15 @@ func TestRenderCountsTheRowsOfAVirtualizedTable(t *testing.T) {
 		t.Fatalf("want the held rows counted, got\n%s", got)
 	}
 }
+
+func TestRenderReadsARoleGrid(t *testing.T) {
+	snapshot := `<Table id="9"><div role="row"><div role="columnheader">Lunes</div></div>` +
+		`<div role="row"><div role="cell">23</div><div role="cell"><CellInput id="9:602" value="3.45"></CellInput></div></div></Table>`
+	got, err := Render(snapshot, "", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "Table 9 | Lunes\n Row | 23 | {CellInput 9:602") {
+		t.Fatalf("want the grid's header and row, got\n%s", got)
+	}
+}
