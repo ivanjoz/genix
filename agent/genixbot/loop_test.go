@@ -197,3 +197,16 @@ func TestParseActionsReadsTheHacerGrammar(t *testing.T) {
 		t.Fatal("free text must not parse")
 	}
 }
+
+func TestRunTurnStopsAFailingLoop(t *testing.T) {
+	repeat := toolCall(ToolHacer, map[string]string{"acciones": "! 999"})
+	model := &scriptedModel{replies: []llm.Message{repeat, repeat, repeat, repeat}}
+	result, err := RunTurn(context.Background(), model, &formPage{current: formOutline}, nil, nil, "/crm/customers", "guárdalo", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The same call failed twice: the third model call gets no tools and its tool call is ignored.
+	if len(model.prompts) != 3 || !strings.HasPrefix(result.Answer, "No pude hacerlo: línea \"! 999\"") {
+		t.Fatalf("calls %d, answer %q", len(model.prompts), result.Answer)
+	}
+}

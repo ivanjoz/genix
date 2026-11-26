@@ -27,6 +27,8 @@ import (
 const (
 	// MaxSteps caps the model calls of one turn.
 	MaxSteps = 12
+	// repeatedFailureLimit: failing calls in a row after which the turn must answer without tools.
+	repeatedFailureLimit = 3
 	// HistoryTurns is how many completed turns are replayed: enough for the model to tell which earlier
 	// thread a short reply ("ok", "sí") continues after the user changed topic.
 	HistoryTurns = 5
@@ -112,13 +114,20 @@ func RunTurn(ctx context.Context, model Model, page Page, facts Facts, history [
 		turn.confirmationAsked = strings.HasSuffix(strings.TrimSpace(history[len(history)-1].Answer), "?")
 	}
 	result := TurnResult{}
+	// A turn that keeps failing stops calling tools: the same call failing twice in a row, or three
+	// failing calls in a row, ends with one more model call without tools, which must answer.
+	failedCall, failures, lastError := "", 0, ""
+	tools := Tools
 	for step := 0; step < MaxSteps; step++ {
-		reply, err := model.Next(ctx, messages, Tools)
+		reply, err := model.Next(ctx, messages, tools)
 		if err != nil {
 			return result, err
 		}
-		if len(reply.ToolCalls) == 0 {
+		if len(reply.ToolCalls) == 0 || tools == nil {
 			result.Answer = strings.TrimSpace(reply.Content)
+			if result.Answer == "" && tools == nil {
+				result.Answer = "No pude hacerlo: " + lastError + "."
+			}
 			if result.Answer == "" {
 				return result, errors.New("genix-bot: empty answer")
 			}
@@ -138,6 +147,22 @@ func RunTurn(ctx context.Context, model Model, page Page, facts Facts, history [
 			toolMessage := llm.Message{Role: "tool", Content: content, ToolCallID: call.ID}
 			result.Steps = append(result.Steps, toolMessage)
 			messages = append(messages, toolMessage)
+			signature := call.Function.Name + " " + call.Function.Arguments
+			switch {
+			case !strings.HasPrefix(content, "Error |"):
+				failedCall, failures = "", 0
+			case signature == failedCall:
+				failures = repeatedFailureLimit
+			default:
+				failedCall, failures = signature, failures+1
+			}
+			if failures > 0 {
+				firstLine, _, _ := strings.Cut(strings.TrimPrefix(content, "Error | "), "\n")
+				lastError = strings.TrimSuffix(firstLine, ".")
+			}
+		}
+		if failures >= repeatedFailureLimit {
+			tools = nil
 		}
 	}
 	return result, ErrStepLimit
