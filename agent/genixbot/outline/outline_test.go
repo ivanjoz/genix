@@ -1,6 +1,7 @@
 package outline
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -146,5 +147,19 @@ func TestRenderShowsToasts(t *testing.T) {
 	want := "Page /crm/customers\nToast | Debe ingresar un email válido.\nButton 37 | Guardar\n"
 	if got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestRenderCountsTheRowsOfAVirtualizedTable(t *testing.T) {
+	rows := ""
+	for index := 1; index <= 6; index++ {
+		rows += fmt.Sprintf(`<Row id="211:%d00"><td>%d</td></Row>`, index, index)
+	}
+	got, err := Render(`<Table id="211" rows-count="4120">`+rows+`</Table>`, "", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "More | +4115 filas") {
+		t.Fatalf("want the held rows counted, got\n%s", got)
 	}
 }

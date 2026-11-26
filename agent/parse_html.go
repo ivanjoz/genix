@@ -128,7 +128,7 @@ func cleanAttributes(n *html.Node) {
 		kept := n.Attr[:0]
 		for _, attr := range n.Attr {
 			key := strings.ToLower(attr.Key)
-			if key == "role" || key == "data-id" || key == "data-value" || key == "data-label" || key == "data-type" || key == "data-cell-type" || key == "data-selected" || key == "data-options-count" || strings.HasPrefix(key, "aria-") {
+			if key == "role" || key == "data-id" || key == "data-value" || key == "data-label" || key == "data-type" || key == "data-cell-type" || key == "data-selected" || key == "data-options-count" || key == "data-rows-count" || strings.HasPrefix(key, "aria-") {
 				kept = append(kept, attr)
 			}
 		}
@@ -655,6 +655,14 @@ func renderComponent(buf *bytes.Buffer, indent, dataID string, c AgentComponentI
 		// Select carries the total option count + the inline option list (when
 		// the list is short enough to embed). The agent uses `options-count`
 		// to decide whether to call `search`/`getOptions` for longer lists.
+		// A virtualized Table renders a window of its rows; `rows-count` is how many it holds.
+		if typ == "Table" {
+			if count := nodeAttr(n, "data-rows-count"); count != "" {
+				buf.WriteString(` rows-count="`)
+				buf.WriteString(html.EscapeString(count))
+				buf.WriteByte('"')
+			}
+		}
 		if typ == "Select" {
 			if count := nodeAttr(n, "data-options-count"); count != "" {
 				buf.WriteString(` options-count="`)

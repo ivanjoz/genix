@@ -57,7 +57,7 @@ A line without an id cannot be acted on (text, read-only tables and their rows, 
 | Selected / active item | ` *` after the label (options, tabs, rows) |
 | Methods | omitted when they are the type's default (Input → setValue, Button → click, Select → search,select,getOptions…); otherwise `{m1,m2}` |
 | Tabs | `OptionsStrip \| [id] Texto * · [id] Texto` (same for `PageViews`) |
-| Registered table | `Table id \| header \| …`, then `Row tableId:rowId \| cell \| …` in header order; **5 rows**, then `More \| +N filas`; no rows → `Text \| sin filas` |
+| Registered table | `Table id \| header \| …`, then `Row tableId:rowId \| cell \| …` in header order; **5 rows**, then `More \| +N filas` (N counts every row the table holds: a virtualized table reports them with `data-rows-count`); no rows → `Text \| sin filas` |
 | Grouped headers (colspan/rowspan) | flattened to one name per leaf column: `Costo Unitario › Consolidado` (read from the raw DOM) |
 | Cell with a component | `{CellInput 75:101 = "x"}` |
 | Card grids | **5 cards** per group, then `More \| +N tarjetas` |

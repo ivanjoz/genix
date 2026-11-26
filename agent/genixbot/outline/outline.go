@@ -21,6 +21,7 @@ import (
 	"io"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -291,7 +292,7 @@ func (r *renderer) collapsesInFocus(n *node) bool {
 func backgroundSummary(n *node) string {
 	parts := []string{}
 	for _, table := range findAll(n, "Table") {
-		parts = append(parts, fmt.Sprintf("Table %s (%d filas)", table.attrs["id"], len(tableRows(table))))
+		parts = append(parts, fmt.Sprintf("Table %s (%d filas)", table.attrs["id"], tableRowsCount(table, len(tableRows(table)))))
 	}
 	if len(parts) == 0 {
 		return ""
@@ -390,9 +391,10 @@ func (r *renderer) renderTable(n *node, depth int) {
 	r.emit(depth, line)
 
 	rows := tableRows(n)
+	total := tableRowsCount(n, len(rows))
 	for index, row := range rows {
 		if index == r.options.MaxRows {
-			r.emit(depth+1, fmt.Sprintf("More | +%d filas", len(rows)-index))
+			r.emit(depth+1, fmt.Sprintf("More | +%d filas", total-index))
 			break
 		}
 		cells := []string{}
@@ -411,6 +413,15 @@ func (r *renderer) renderTable(n *node, depth int) {
 	if len(rows) == 0 {
 		r.emit(depth+1, "Text | sin filas")
 	}
+}
+
+// tableRowsCount is the rows a Table holds: its `rows-count` when virtualized (it renders only a
+// window of them), else the rows rendered.
+func tableRowsCount(n *node, rendered int) int {
+	if count, err := strconv.Atoi(n.attrs["rows-count"]); err == nil && count > rendered {
+		return count
+	}
+	return rendered
 }
 
 // tableRows: the registered Row components, or the body rows of a table whose rows are not registered
