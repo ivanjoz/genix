@@ -328,6 +328,8 @@
         <!-- Keep both state toggles adjacent so operators can scan the workflow quickly. -->
         <InlineButton label="P" color="green" mode={isSaleOrderPaid(saleOrder) ? 'checked' : 'default'} />
         <InlineButton label="E" color="blue" mode={isSaleOrderDelivered(saleOrder) ? 'checked' : 'default'} />
+        <!-- The letters say the state only by color: screen readers and the agent read this instead. -->
+        <span class="sr-only">{tr(isSaleOrderPaid(saleOrder) ? 'paid|pagado' : 'not paid|no pagado')}, {tr(isSaleOrderDelivered(saleOrder) ? 'delivered|entregado' : 'not delivered|no entregado')}</span>
         {#if saleOrder.PendingStockMovement === 1}
           <!-- Delivered, but a made product's stock leaves only at the daily production close. -->
           <span class="px-6 rounded-sm bg-amber-100 text-amber-800 font-bold"
