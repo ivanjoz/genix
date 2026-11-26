@@ -134,3 +134,17 @@ func TestRenderEditableGridRows(t *testing.T) {
 		t.Fatalf("render\n got:\n%q\nwant:\n%q", got, want)
 	}
 }
+
+func TestRenderShowsToasts(t *testing.T) {
+	raw := `<div aria-live="polite"><button class="notify-toast bg-red-solid"><i></i> <span>Debe ingresar un email válido.</span> <span class="notify-toast-timer"></span></button></div>` +
+		`<div data-id="Button:37" aria-label="Guardar">Guardar</div>`
+	snapshot := `<div aria-live="polite"></div><Button id="37">Guardar</Button>`
+	got, err := Render(snapshot, raw, Options{Route: "/crm/customers"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Page /crm/customers\nToast | Debe ingresar un email válido.\nButton 37 | Guardar\n"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}

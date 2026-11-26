@@ -41,6 +41,7 @@ A line without an id cannot be acted on (text, read-only tables and their rows, 
 | `Page` | first line: `Page <route> \| <title>` |
 | `Delta` | first line of an action result that lists only changes: `Delta <route>` |
 | `Text` | visible text: `Text \| Debe seleccionar un almacén.` |
+| `Toast` | a notification on screen, right after the `Page` line: `Toast \| Debe ingresar un email válido.` (a refused save says why only there) |
 | `Table` / `Row` without id | an unregistered, read-only table |
 | `More` | items left out: `More \| +12 filas`, `More \| +25 tarjetas` |
 
@@ -65,7 +66,7 @@ A line without an id cannot be acted on (text, read-only tables and their rows, 
 | Labels | Spanish half of `English\|Español`; `word\|palabra` inside an English sentence keeps the Spanish word; ` \| ` inside labels and cells becomes ` / ` |
 | **Focus mode** | while a floating layer is open (raw DOM `data-layer-id`), every container outside it collapses to `Type id \| en segundo plano: Table N (k filas)`; leaf components outside (buttons, filters) stay |
 | **Delta** | action results list only changed lines (`~` changed, `+` new, `-` removed key); the full outline is sent instead when the route changes or more than half of the lines changed (a layer opened) |
-| Dropped | app header (title kept), empty `TopLayerSelector`/`TopLayerDatePicker`, unregistered `button`/`input`/`img`, `aria-live` regions, text repeating the enclosing component's label |
+| Dropped | app header (title kept), empty `TopLayerSelector`/`TopLayerDatePicker`, unregistered `button`/`input`/`img`, `aria-live` regions (their toasts are the `Toast` lines), text repeating the enclosing component's label |
 
 ## Token choices (measured on LFM3's tokenizer)
 

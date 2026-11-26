@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -113,6 +114,11 @@ func Render(snapshotHTML, rawHTML string, options Options) (string, error) {
 		pageLine += " | " + escapeCell(title)
 	}
 	renderer.lines = append(renderer.lines, pageLine)
+	// A toast is often the only answer to a click (a refused save says why there); the aria-live
+	// region holding it is dropped below with the other live regions.
+	for _, toast := range toastsFromRaw(rawHTML) {
+		renderer.lines = append(renderer.lines, "Toast | "+escapeCell(toast))
+	}
 	renderer.cardPositions = cardPositions(root)
 	renderer.renderChildren(root, 0)
 	return strings.Join(renderer.lines, "\n") + "\n", nil
@@ -533,6 +539,40 @@ func floatingLayersFromRaw(rawHTML string) map[string]bool {
 	}
 	walk(document)
 	return layers
+}
+
+// toastsFromRaw returns the texts of the notifications on screen (genix-ui `notify-toast`).
+func toastsFromRaw(rawHTML string) []string {
+	toasts := []string{}
+	document, err := html.Parse(strings.NewReader(rawHTML))
+	if err != nil {
+		return toasts
+	}
+	var text func(*html.Node) string
+	text = func(n *html.Node) string {
+		if n.Type == html.TextNode {
+			return n.Data
+		}
+		parts := []string{}
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			parts = append(parts, text(child))
+		}
+		return strings.Join(parts, " ")
+	}
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && slices.Contains(strings.Fields(htmlAttr(n, "class")), "notify-toast") {
+			if toast := cleanText(text(n)); toast != "" {
+				toasts = append(toasts, toast)
+			}
+			return
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(document)
+	return toasts
 }
 
 // HeaderCell is one <th> with its spans.
