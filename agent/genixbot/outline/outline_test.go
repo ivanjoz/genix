@@ -110,8 +110,8 @@ func TestMethods(t *testing.T) {
 	cases := map[string]string{
 		`Checkbox 12 | Activo = sí`:                  "click",
 		`Select 5 | Moneda = [1] Soles | 2 opciones`: "search,select,getOptions",
-		`TableBody 40 | {selectRow,click}`:          "selectRow,click",
-		`Text | sin filas`:                          "",
+		`TableBody 40 | {selectRow,click}`:           "selectRow,click",
+		`Text | sin filas`:                           "",
 	}
 	for line, want := range cases {
 		if got := strings.Join(Methods(line), ","); got != want {

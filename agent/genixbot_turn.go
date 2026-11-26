@@ -210,14 +210,14 @@ func genixBotArguments(action genixbot.Action) []any {
 // optionsText renders the options a search returned the way outlines list them: "[id] label, …".
 func optionsText(value json.RawMessage) string {
 	options := []AgentOption{}
-	if len(value) == 0 || json.Unmarshal(value, &options) != nil {
+	if len(value) == 0 || json.Unmarshal(value, &options) != nil || options == nil {
 		return ""
 	}
 	labels := make([]string, len(options))
 	for index, option := range options {
 		labels[index] = fmt.Sprintf("[%v] %v", option.ID, option.Value)
 	}
-	return strings.Join(labels, ", ")
+	return genixbot.SearchMatches(labels)
 }
 
 // genixBotOutline parses the browser's DOM with the full snapshot (no row or byte limits: the

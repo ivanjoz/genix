@@ -50,3 +50,19 @@ const ErrorUnknownID = "el id no está en la página"
 func ErrorNoMethod(componentType, method string) string {
 	return componentType + " no tiene el método " + method
 }
+
+// SearchShown caps the matches a `search` shows: a short list keeps the prompt small, and "+N más"
+// tells the model to narrow the search.
+const SearchShown = 10
+
+// SearchMatches renders a search's matches ("[id] label") the way `hacer` shows them; an empty search
+// says so instead of showing nothing.
+func SearchMatches(options []string) string {
+	if len(options) == 0 {
+		return "sin resultados"
+	}
+	if len(options) <= SearchShown {
+		return strings.Join(options, ", ")
+	}
+	return strings.Join(options[:SearchShown], ", ") + fmt.Sprintf(" (+%d más)", len(options)-SearchShown)
+}

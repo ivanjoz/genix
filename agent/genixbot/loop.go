@@ -183,9 +183,9 @@ func (turn *turnState) runTool(ctx context.Context, call llm.ToolCall) (string, 
 	return "Error | herramienta desconocida: " + call.Function.Name, ""
 }
 
-// protectedButtonPattern: buttons that save, send or delete. Clicking one needs "!" (the user's
+// protectedButtonPattern: buttons that save, send, delete, pay or deliver. Clicking one needs "!" (the user's
 // confirmation); Genix's buttons carry no role attribute, so the label decides.
-var protectedButtonPattern = regexp.MustCompile(`(?i)^\s*Button ([0-9:]+) \| (guardar|grabar|eliminar|borrar|enviar|anular|emitir|save|delete|send)\b`)
+var protectedButtonPattern = regexp.MustCompile(`(?i)^\s*Button ([0-9:]+) \| (guardar|grabar|eliminar|borrar|enviar|anular|emitir|pagar|cobrar|entregar|save|delete|send|pay|deliver)\b`)
 
 func (turn *turnState) runActions(ctx context.Context, acciones string) (string, string) {
 	actions, err := ParseActions(acciones)
