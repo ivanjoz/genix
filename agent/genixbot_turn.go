@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -45,7 +47,11 @@ func (s *AgentSession) runGenixBotTurn(ctx context.Context, modelConfig llm.Mode
 	model := &genixBotModel{client: client}
 	s.pushStatus("thinking", "Pensando…", 1, genixbot.MaxSteps)
 	step := 1
-	result, err := genixbot.RunTurn(llm.WithLocalStage(ctx, "genix-bot"), model, &genixBotPage{session: s}, genixBotFacts{},
+	page := &genixBotPage{session: s}
+	if turn := llm.LocalTurnFrom(ctx); turn != nil {
+		page.turnID = turn.ID
+	}
+	result, err := genixbot.RunTurn(llm.WithLocalStage(ctx, "genix-bot"), model, page, genixBotFacts{},
 		history, route, userText, func(call llm.ToolCall) {
 			step++
 			s.pushStatus("acting", genixBotStatusLabel(call), step, genixbot.MaxSteps)
@@ -120,13 +126,40 @@ func (model *genixBotModel) Next(ctx context.Context, messages []llm.Message, to
 }
 
 // genixBotPage is the tab's page as outlines.
-type genixBotPage struct{ session *AgentSession }
+type genixBotPage struct {
+	session *AgentSession
+	// turnID names the turn's page log files, the same id the model log records (X-Genix-Turn).
+	turnID    string
+	pagesRead int
+}
+
+// logPage keeps, in local development, every page a turn read: route, HTML and components, the input
+// of ParsePageHTML. genix-local-ai turns them into simulator states, so evaluation and training can
+// replay the pages real sessions saw. Never fails the turn.
+func (page *genixBotPage) logPage(content PageContent, route string) {
+	if !core.Env.IS_DEV_ARG || page.turnID == "" {
+		return
+	}
+	page.pagesRead++
+	directory := filepath.Join(core.ProjectTmpDir(), "genixbot-pages", time.Now().Format("2006_01_02"))
+	encoded, err := json.Marshal(map[string]any{"Route": route, "SessionID": page.session.SessionID, "HTML": content.HTML, "Components": content.Components})
+	if err == nil {
+		err = os.MkdirAll(directory, 0o755)
+	}
+	if err == nil {
+		err = os.WriteFile(filepath.Join(directory, fmt.Sprintf("%s_%02d.json", page.turnID, page.pagesRead)), encoded, 0o644)
+	}
+	if err != nil {
+		core.Log("agent.genix-bot page log failed::", err)
+	}
+}
 
 func (page *genixBotPage) Outline(ctx context.Context) (string, error) {
 	content, err := GetPageContent(ctx, page.session.TabID)
 	if err != nil {
 		return "", err
 	}
+	page.logPage(content, page.session.CurrentRoute())
 	return genixBotOutline(content, page.session.CurrentRoute())
 }
 
@@ -146,6 +179,7 @@ func (page *genixBotPage) Navigate(ctx context.Context, route string) (string, e
 	if navigation.Page == nil {
 		return "", errors.New("la página no devolvió su contenido")
 	}
+	page.logPage(*navigation.Page, route)
 	return genixBotOutline(*navigation.Page, route)
 }
 
@@ -172,6 +206,7 @@ func (page *genixBotPage) Invoke(ctx context.Context, actions []genixbot.Action)
 	if batch.Page == nil {
 		return nil, "", errors.New("la página no devolvió su contenido")
 	}
+	page.logPage(*batch.Page, page.session.CurrentRoute())
 	pageOutline, err := genixBotOutline(*batch.Page, page.session.CurrentRoute())
 	return results, pageOutline, err
 }

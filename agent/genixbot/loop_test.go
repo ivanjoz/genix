@@ -133,6 +133,58 @@ func TestRunTurnGuardsSaveUntilTheUserConfirmed(t *testing.T) {
 	}
 }
 
+// The bad session of 2026-11-25: an "ok" meant for a navigation offer closed the open form and threw
+// the name away. Closing a form that has a save button needs "!" like saving does.
+func TestRunTurnGuardsClosingAForm(t *testing.T) {
+	unconfirmedClose := &scriptedModel{replies: []llm.Message{
+		toolCall(ToolHacer, map[string]string{"acciones": "138 click"}),
+		{Role: "assistant", Content: "¿Cierro el formulario sin guardar?"},
+	}}
+	page := &formPage{current: formOutline}
+	result, err := RunTurn(context.Background(), unconfirmedClose, page, nil, nil, "/crm/customers", "ok", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Steps[1].Content != "Error | 138: requiere confirmación del usuario" || len(page.invoked) != 0 {
+		t.Fatalf("unconfirmed close ran: %q %v", result.Steps[1].Content, page.invoked)
+	}
+	// Without a save button on the page, a close button is an ordinary click.
+	page = &formPage{current: "Page /crm/customers | Clientes\nLayer 136 | Detalle\n Button 138 | Cerrar\n"}
+	plainClose := &scriptedModel{replies: []llm.Message{
+		toolCall(ToolHacer, map[string]string{"acciones": "138 click"}),
+		{Role: "assistant", Content: "Listo, lo cerré."},
+	}}
+	if _, err := RunTurn(context.Background(), plainClose, page, nil, nil, "/crm/customers", "cierra eso", nil); err != nil || len(page.invoked) != 1 {
+		t.Fatalf("plain close: %v %v", err, page.invoked)
+	}
+}
+
+func TestMessagesReplaysOlderTurnsByTheirFirstLines(t *testing.T) {
+	formTurn := CompletedTurn{Route: "/crm/customers", UserText: "crea el cliente Raul", Answer: "¿Lo guardo?", Steps: []llm.Message{
+		toolCall(ToolHacer, map[string]string{"acciones": "134 click"}),
+		{Role: "tool", Content: strings.TrimSpace(formOutline), ToolCallID: ToolHacer},
+	}}
+	offerTurn := CompletedTurn{Route: "/crm/customers", UserText: "mis top 3 productos?", Answer: "¿Te abro Gráficos de Ventas?", Steps: []llm.Message{
+		toolCall(ToolVer, nil),
+		{Role: "tool", Content: strings.TrimSpace(formOutline), ToolCallID: ToolVer},
+	}}
+	messages := Messages([]CompletedTurn{formTurn, offerTurn}, "/crm/customers", "ok")
+	if got := messages[3].Content; got != "Page /crm/customers | Clientes" {
+		t.Fatalf("older turn's tool result %q", got)
+	}
+	if got := messages[7].Content; got != strings.TrimSpace(formOutline) {
+		t.Fatalf("last turn's tool result %q", got)
+	}
+	// Compacting the prompt never edits the stored history.
+	if formTurn.Steps[1].Content != strings.TrimSpace(formOutline) {
+		t.Fatal("Messages changed the history it was given")
+	}
+	history := make([]CompletedTurn, HistoryTurns+2)
+	if got := len(Messages(history, "/crm/customers", "ok")); got != 1+HistoryTurns*2+1 {
+		t.Fatalf("%d messages: the history must be cut to %d turns", got, HistoryTurns)
+	}
+}
+
 func TestParseActionsReadsTheHacerGrammar(t *testing.T) {
 	actions, err := ParseActions("79 setValue Pedro Pascal\n82 select 2\n! 77 click\n75 selectRow 75:300")
 	if err != nil {

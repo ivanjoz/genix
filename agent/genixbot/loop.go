@@ -21,15 +21,15 @@ import (
 //	assistant : hacer("79 setValue Pedro")  → Delta (only the changed lines)
 //	assistant : Listo, llené Nombre. ¿Guardo el cliente?    (plain text ends the turn)
 //
-// Past turns are replayed whole (user, tool calls, tool results, answer), the way the two-turn
-// samples (save or cancel after the confirmation question) are written.
+// The last completed turn is replayed whole (user, tool calls, tool results, answer); older turns keep
+// their calls and only the first line of each tool result (see Messages).
 
 const (
 	// MaxSteps caps the model calls of one turn.
 	MaxSteps = 12
-	// HistoryTurns is how many completed turns are replayed. The training data has at most one
-	// before the current message; a few more keep short follow-ups answerable.
-	HistoryTurns = 3
+	// HistoryTurns is how many completed turns are replayed: enough for the model to tell which earlier
+	// thread a short reply ("ok", "sí") continues after the user changed topic.
+	HistoryTurns = 5
 	// maxAnswerTokens: LFM3 may open a <think> block before answering.
 	maxAnswerTokens = 600
 )
@@ -78,14 +78,23 @@ type TurnResult struct {
 }
 
 // Messages builds the prompt of a turn: the system prompt, the replayed history and the user message.
+// Only the last completed turn keeps its tool results whole. Older turns keep each result's first line
+// ("Page /crm/customers | Clientes", an "Error | …" line): what the model did stays readable, the page
+// it read then does not — the current page comes from `ver`, never from an old outline.
 func Messages(history []CompletedTurn, route, text string) []llm.Message {
 	if len(history) > HistoryTurns {
 		history = history[len(history)-HistoryTurns:]
 	}
 	messages := []llm.Message{{Role: "system", Content: SystemPrompt}}
-	for _, completedTurn := range history {
+	for index, completedTurn := range history {
 		messages = append(messages, llm.Message{Role: "user", Content: UserMessage(completedTurn.Route, completedTurn.UserText)})
-		messages = append(messages, completedTurn.Steps...)
+		isOlderTurn := index < len(history)-1
+		for _, step := range completedTurn.Steps {
+			if isOlderTurn && step.Role == "tool" {
+				step.Content, _, _ = strings.Cut(step.Content, "\n")
+			}
+			messages = append(messages, step)
+		}
 		messages = append(messages, llm.Message{Role: "assistant", Content: completedTurn.Answer})
 	}
 	return append(messages, llm.Message{Role: "user", Content: UserMessage(route, text)})
@@ -187,6 +196,10 @@ func (turn *turnState) runTool(ctx context.Context, call llm.ToolCall) (string, 
 // confirmation); Genix's buttons carry no role attribute, so the label decides.
 var protectedButtonPattern = regexp.MustCompile(`(?i)^\s*Button ([0-9:]+) \| (guardar|grabar|eliminar|borrar|enviar|anular|emitir|pagar|cobrar|entregar|save|delete|send|pay|deliver)\b`)
 
+// discardButtonPattern: close and cancel buttons. On a page with a save button they discard what the form
+// holds, so they need "!" too: an "ok" meant for something else must never throw the user's data away.
+var discardButtonPattern = regexp.MustCompile(`(?i)^\s*Button ([0-9:]+) \| (cerrar|cancelar|close|cancel)\b`)
+
 func (turn *turnState) runActions(ctx context.Context, acciones string) (string, string) {
 	actions, err := ParseActions(acciones)
 	if err != nil {
@@ -198,9 +211,18 @@ func (turn *turnState) runActions(ctx context.Context, acciones string) (string,
 		return "Error | hacer: " + err.Error(), ""
 	}
 	protectedIDs := map[string]bool{}
+	discardIDs := []string{}
 	for _, line := range strings.Split(livePage, "\n") {
 		if match := protectedButtonPattern.FindStringSubmatch(line); match != nil {
 			protectedIDs[match[1]] = true
+		}
+		if match := discardButtonPattern.FindStringSubmatch(line); match != nil {
+			discardIDs = append(discardIDs, match[1])
+		}
+	}
+	if len(protectedIDs) > 0 {
+		for _, discardID := range discardIDs {
+			protectedIDs[discardID] = true
 		}
 	}
 	for _, action := range actions {

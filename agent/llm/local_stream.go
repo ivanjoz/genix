@@ -56,6 +56,12 @@ func WithLocalTurn(ctx context.Context, turn *LocalTurn) context.Context {
 	return context.WithValue(ctx, localTurnKey{}, turn)
 }
 
+// LocalTurnFrom returns the turn ctx belongs to, nil outside a turn.
+func LocalTurnFrom(ctx context.Context) *LocalTurn {
+	turn, _ := ctx.Value(localTurnKey{}).(*LocalTurn)
+	return turn
+}
+
 // WithLocalStage names the stage ("planner", "executor", "pagebuilder") of the calls made with ctx.
 func WithLocalStage(ctx context.Context, stage string) context.Context {
 	return context.WithValue(ctx, localStageKey{}, stage)

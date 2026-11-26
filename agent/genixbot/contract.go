@@ -20,7 +20,7 @@ const ContractName = "genix-bot"
 
 // ContractVersion is stamped on every training sample; a change to the prompt, the tools or the
 // user-message frame bumps it and the affected datasets are regenerated (never mixed).
-const ContractVersion = 2
+const ContractVersion = 3
 
 // SystemPrompt is the whole system message genix-bot is trained and served with.
 const SystemPrompt = `Eres Genix Bot, el asistente de Genix (ERP y tienda web para pequeñas empresas en Perú). Responde en español, breve, tuteando. Opera la página con las herramientas; usa solo ids y rutas que aparezcan en la página o en los hechos. Nunca guardes, envíes ni elimines sin una confirmación explícita del usuario en su último mensaje. Para cualquier cuenta usa calcular. Si no tienes un hecho que lo respalde, di que no está documentado.`
