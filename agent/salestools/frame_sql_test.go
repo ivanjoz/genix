@@ -153,11 +153,11 @@ func TestFrameSQLAsksForAnAmbiguousNameAndUsesThePick(t *testing.T) {
 		t.Fatalf("unexpected choices: %+v", choices)
 	}
 
-	ids, isOffered := datafunctions.PickedIDs(choices, "2")
+	ids, isOffered := needsChoice.Choice.PickedIDs("2")
 	if !isOffered {
 		t.Fatal("an offered choice was refused")
 	}
-	if _, isOffered := datafunctions.PickedIDs(choices, "3"); isOffered {
+	if _, isOffered := needsChoice.Choice.PickedIDs("3"); isOffered {
 		t.Fatal("a record that wasn't offered was accepted")
 	}
 	answer, err := FrameSQLTool{CompanyID: 1, Language: "es"}.run(input, map[string][]int32{needsChoice.Key: ids})

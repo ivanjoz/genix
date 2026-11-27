@@ -313,6 +313,26 @@ func TestArgumentErrorsGoBackToTheModel(t *testing.T) {
 	}
 }
 
+// "Incluir todos" takes every record the name matches, not only the 5 the question offers: the one
+// that sold may be the sixth.
+func TestIncludeAllTakesEveryMatchedRecord(t *testing.T) {
+	matches := []RecordMatch{}
+	for id := int32(1); id <= 7; id++ {
+		matches = append(matches, RecordMatch{ID: id, Name: "Lote de Navidad " + strconv.Itoa(int(id))})
+	}
+	choice := choiceQuestion("es", "navidad", "producto", "product", classifyMatches("navidad", matches))
+	if len(choice.Options) != maxQuestionOptions+1 || choice.Options[maxQuestionOptions].ID != IncludeAllChoiceID {
+		t.Fatalf("options: %+v", choice.Options)
+	}
+	records, isOffered := choice.PickedRecords(IncludeAllChoiceID)
+	if !isOffered || !slices.Equal(records, []string{"#1", "#2", "#3", "#4", "#5", "#6", "#7"}) {
+		t.Fatalf("include all: %v %v", records, isOffered)
+	}
+	if _, isOffered := choice.PickedRecords("6"); isOffered {
+		t.Fatal("a matched record that wasn't offered was accepted as a pick")
+	}
+}
+
 // An ambiguous name ends the call with a choice; the pick comes back as #<id> and never resolves
 // again.
 func TestAnAmbiguousNameAsksAndThePickRunsWithoutASearch(t *testing.T) {

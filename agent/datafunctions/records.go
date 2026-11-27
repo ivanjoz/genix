@@ -27,7 +27,7 @@ const (
 	resolveSearchLimit = 20
 	// maxQuestionOptions keeps a choice question to 5 records, plus "Include all".
 	maxQuestionOptions = 5
-	// IncludeAllChoiceID is the choice that takes every record offered.
+	// IncludeAllChoiceID is the choice that takes every record the name matches, offered or not.
 	IncludeAllChoiceID = "all"
 )
 
@@ -189,6 +189,9 @@ type Choice struct {
 	Name     string
 	Question string
 	Options  []ChoiceOption
+	// MatchedIDs are every record the name matches, up to the search's 20 hits: what "Incluir todos"
+	// takes. The question offers only the first 5.
+	MatchedIDs []int32
 }
 
 type ChoiceOption struct {
@@ -197,27 +200,26 @@ type ChoiceOption struct {
 	Label string
 }
 
-// PickedIDs reads the user's answer to a choice: the picked record, or every offered record.
-func PickedIDs(options []ChoiceOption, answer string) ([]int32, bool) {
-	offeredIDs := []int32{}
-	for _, option := range options {
-		if id, err := strconv.ParseInt(option.ID, 10, 32); err == nil {
-			offeredIDs = append(offeredIDs, int32(id))
-			if option.ID == answer {
-				return []int32{int32(id)}, true
-			}
+// PickedIDs reads the user's answer to a choice: the picked record, or every matched record.
+func (choice Choice) PickedIDs(answer string) ([]int32, bool) {
+	for _, option := range choice.Options {
+		if option.ID != answer {
+			continue
 		}
-	}
-	if answer == IncludeAllChoiceID && slices.ContainsFunc(options, func(option ChoiceOption) bool { return option.ID == IncludeAllChoiceID }) {
-		return offeredIDs, true
+		if answer == IncludeAllChoiceID {
+			return choice.MatchedIDs, true
+		}
+		if id, err := strconv.ParseInt(option.ID, 10, 32); err == nil {
+			return []int32{int32(id)}, true
+		}
 	}
 	return nil, false
 }
 
 // PickedRecords is the answer as a data function's call writes it in place of the name: "#13", or
-// every offered record for "Incluir todos".
+// every matched record for "Incluir todos".
 func (choice Choice) PickedRecords(answer string) ([]string, bool) {
-	ids, isOffered := PickedIDs(choice.Options, answer)
+	ids, isOffered := choice.PickedIDs(answer)
 	records := make([]string, len(ids))
 	for i, id := range ids {
 		records[i] = "#" + strconv.Itoa(int(id))
@@ -332,6 +334,7 @@ func choiceQuestion(language, name, spanishNoun, englishNoun string, decision ma
 	}
 	if len(decision.options) > 1 {
 		choice.Options = append(choice.Options, ChoiceOption{ID: IncludeAllChoiceID, Label: Localized(language, "Incluir todos", "Include all")})
+		choice.MatchedIDs = decision.matchedIDs
 	}
 	return choice
 }
@@ -349,6 +352,8 @@ type matchDecision struct {
 	kind         matchKind
 	confidentIDs []int32
 	options      []RecordMatch
+	// matchedIDs are every ambiguous candidate; options are the first of them.
+	matchedIDs []int32
 }
 
 // classifyMatches decides whether a name names one record. The search ranks the hits, but its score
@@ -359,7 +364,8 @@ type matchDecision struct {
 //   - Not found: no hit, or no name holds even half of the query words, fuzzy included.
 //   - Confident: exactly one name has the query's words and no other; else exactly one name holds
 //     every query word exactly; else a single candidate holding every word, fuzzy included.
-//   - Ambiguous: the names holding every word exactly, or else the first hits, at most 5.
+//   - Ambiguous: the names holding every word exactly, or else the hits holding the most words; the
+//     question offers the first 5.
 //   - Suggested: a single candidate that misses a query word: ask "did you mean" instead of
 //     answering about another record.
 func classifyMatches(name string, matches []RecordMatch) matchDecision {
@@ -413,7 +419,11 @@ func classifyMatches(name string, matches []RecordMatch) matchDecision {
 		}
 		return matchDecision{kind: matchSuggested, options: optionMatches}
 	}
-	return matchDecision{kind: matchAmbiguous, options: optionMatches[:min(len(optionMatches), maxQuestionOptions)]}
+	matchedIDs := make([]int32, len(optionMatches))
+	for i, match := range optionMatches {
+		matchedIDs[i] = match.ID
+	}
+	return matchDecision{kind: matchAmbiguous, options: optionMatches[:min(len(optionMatches), maxQuestionOptions)], matchedIDs: matchedIDs}
 }
 
 type wordMatch int8

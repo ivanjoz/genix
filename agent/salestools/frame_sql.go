@@ -53,13 +53,13 @@ type frameSQLInput struct {
 }
 
 // pendingChoice is the tool's interrupt state: the names the user already picked, and the question
-// asked now. A resumed call validates the answer against Choices: the browser echoes it back, and
+// asked now. A resumed call validates the answer against Choice: the browser echoes it back, and
 // is never trusted with an ID it wasn't offered.
 type pendingChoice struct {
 	// Picks are record IDs by name key (collection:normalized words).
-	Picks   map[string][]int32
-	Key     string
-	Choices []datafunctions.ChoiceOption
+	Picks  map[string][]int32
+	Key    string
+	Choice datafunctions.Choice
 }
 
 // choiceQuestion is a choice as the harness pauses the turn with it.
@@ -188,12 +188,12 @@ func (frameSQLTool FrameSQLTool) InvokableRun(ctx context.Context, argumentsJSON
 	if wasInterrupted, hasState, pending := tool.GetInterruptState[pendingChoice](ctx); wasInterrupted && hasState {
 		picks = pending.Picks
 		isResumeTarget, hasAnswer, answer := tool.GetResumeContext[string](ctx)
-		ids, isOffered := datafunctions.PickedIDs(pending.Choices, answer)
+		ids, isOffered := pending.Choice.PickedIDs(answer)
 		if !isResumeTarget || !hasAnswer || !isOffered {
 			// The answer isn't one of the choices: ask the same question again.
 			core.Log("agent.salestools choice not offered key::", pending.Key, " answer::", answer)
 			question := datafunctions.Localized(frameSQLTool.Language, "Elige una de las opciones.", "Pick one of the options.")
-			return "", tool.StatefulInterrupt(ctx, choiceQuestion(question, pending.Choices), pending)
+			return "", tool.StatefulInterrupt(ctx, choiceQuestion(question, pending.Choice.Options), pending)
 		}
 		picks[pending.Key] = ids
 	}
@@ -202,7 +202,7 @@ func (frameSQLTool FrameSQLTool) InvokableRun(ctx context.Context, argumentsJSON
 	var needsChoice *datafunctions.NeedsChoiceError
 	if errors.As(err, &needsChoice) {
 		return "", tool.StatefulInterrupt(ctx, choiceQuestion(needsChoice.Choice.Question, needsChoice.Choice.Options),
-			pendingChoice{Picks: picks, Key: needsChoice.Key, Choices: needsChoice.Choice.Options})
+			pendingChoice{Picks: picks, Key: needsChoice.Key, Choice: needsChoice.Choice})
 	}
 	if err != nil {
 		return "", err
