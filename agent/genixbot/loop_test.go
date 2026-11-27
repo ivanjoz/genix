@@ -177,7 +177,7 @@ func TestAsksForFinalActionReadsEveryFormOfTheVerbs(t *testing.T) {
 		}
 	}
 	doesNotAsk := []string{"crea el cliente", "regístralo", "abre la página de pagos", "registra el cobro", "muéstrame el borrador",
-		"¿cuánto cuesta el envío?", "ventas anuladas", "sí", "ok"}
+		"¿cuánto cuesta el envío?", "ventas anuladas", "sí", "ok", "¿cuál es la entrega pendiente?", "entrega el pedido", "mis entregas"}
 	for _, text := range doesNotAsk {
 		if AsksForFinalAction(text) {
 			t.Errorf("%q must not ask for the final action", text)

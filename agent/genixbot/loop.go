@@ -325,9 +325,13 @@ func (turn *turnState) runTool(ctx context.Context, call llm.ToolCall) (string, 
 // anular, emitir, pagar, cobrar, entregar — in any person, tense or enclitic form ("guárdalo",
 // "envíala", "págale", "entrégaselo"), over text lowercased and without accents. The endings are
 // listed so most nouns that share a stem do not count ("página", "pago", "cobro", "envío",
-// "borrador"); "entrega" is both a noun and the imperative, and counts.
+// "borrador").
 var finalActionVerbPattern = regexp.MustCompile(`\b(guard|grab|envi|elimin|borr|anul|emit|pagu?|cobr|entregu?)` +
 	`(a|as|an|ar|ad|amos|ando|e|es|en|emos|ir|id|imos|iendo)((me|se|nos)?(lo|la|los|las|le|les)|me|nos|se)?\b`)
+
+// nounLikeVerbForms are verb forms written exactly like a noun ("la entrega pendiente"): they never
+// count, so "entrega el pedido" still asks "¿Lo entrego?" (the user's choice, 2026-11-27: stricter).
+var nounLikeVerbForms = map[string]bool{"entrega": true, "entregas": true}
 
 var accentFolder = strings.NewReplacer("á", "a", "é", "e", "í", "i", "ó", "o", "ú", "u", "ü", "u")
 
@@ -335,7 +339,12 @@ var accentFolder = strings.NewReplacer("á", "a", "é", "e", "í", "i", "ó", "o
 // cancel, issue, payment or delivery: then a "!" action needs no question first. A fixed verb list,
 // no reading of intent: "crea el cliente" or "regístralo" alone still asks "¿Lo guardo?".
 func AsksForFinalAction(text string) bool {
-	return finalActionVerbPattern.MatchString(accentFolder.Replace(strings.ToLower(text)))
+	for _, verbForm := range finalActionVerbPattern.FindAllString(accentFolder.Replace(strings.ToLower(text)), -1) {
+		if !nounLikeVerbForms[verbForm] {
+			return true
+		}
+	}
+	return false
 }
 
 // protectedButtonPattern: buttons that save, send, delete, pay or deliver. Clicking one needs "!" (the user's
