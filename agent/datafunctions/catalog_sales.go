@@ -17,7 +17,8 @@ var salesFunctions = []Function{
 			"No da el número de ventas ni el ticket promedio, y no combina clientes con sedes.",
 		Arguments: arguments("period?", "products?", "clients?", "categories?", "sites?"),
 		Examples: []string{"cuánto vendí", "total de ventas", "monto vendido en el periodo", "cuánto se vendió en total",
-			"suma de todas las ventas", "cuanto vendimos", "cuánto vendí de un producto", "cuánto le vendí a un cliente", "total vendido en una sede"},
+			"suma de todas las ventas", "cuanto vendimos", "cuánto vendí de un producto", "cuánto le vendí a un cliente", "total vendido en una sede",
+			"cuánto he vendido", "cuánto llevo vendido", "a cuánto suman las ventas"},
 		Message: "Total vendido {periodo}{filtros}: {valor}.",
 		run:     func(call *functionCall) (shownResult, error) { return call.total("amount") },
 	},
@@ -28,7 +29,9 @@ var salesFunctions = []Function{
 			"No da el número de ventas por día ni combina clientes con sedes.",
 		Arguments: arguments("period?", "products?", "clients?", "categories?", "sites?"),
 		Examples: []string{"ventas diarias", "cuánto vendí cada día", "evolución diaria de las ventas", "gráfico de ventas por día",
-			"ventas día por día", "tendencia diaria de ventas", "cómo fueron las ventas cada día", "ventas por fecha", "venta diaria de una sede"},
+			"ventas día por día", "tendencia diaria de ventas", "cómo fueron las ventas cada día", "ventas por fecha", "venta diaria de una sede",
+			"ventas de cada día", "total vendido por día", "ventas diarias de un producto",
+			"monto diario del periodo", "cuánto se vendió en cada fecha"},
 		Message: "Ventas por día {periodo}{filtros}: {valor} en total.",
 		run:     func(call *functionCall) (shownResult, error) { return call.timeline("date", "amount", "line") },
 	},
@@ -39,7 +42,9 @@ var salesFunctions = []Function{
 			"No da unidades, porque cada producto tiene su propia unidad, ni el número de ventas.",
 		Arguments: arguments("period?", "products?", "clients?", "categories?", "sites?"),
 		Examples: []string{"ventas semanales", "cuánto vendí cada semana", "ventas por semana", "evolución semanal de las ventas",
-			"gráfico semanal de ventas", "semana a semana cuánto vendimos", "total de cada semana", "ventas semanales de una sede"},
+			"gráfico semanal de ventas", "semana a semana cuánto vendimos", "total de cada semana", "ventas semanales de una sede",
+			"ventas de cada semana", "total vendido por semana", "semanas con más ventas",
+			"tendencia semanal de las ventas", "ventas totales por semana"},
 		Message: "Ventas por semana {periodo}{filtros}: {valor} en total.",
 		run:     func(call *functionCall) (shownResult, error) { return call.timeline("WEEK(date)", "amount", "bar") },
 	},
@@ -57,7 +62,7 @@ var salesFunctions = []Function{
 	{
 		Name: "average_daily_sales", Domain: "sales", Access: salesAccess,
 		Title: "Venta promedio diaria", Gist: "monto vendido dividido entre todos los días, con o sin ventas",
-		Description: "El monto vendido dividido entre todos los días del periodo, contando en cero los días sin ventas; en soles y sin ventas anuladas. " +
+		Description: "El promedio diario: el monto vendido dividido entre todos los días del periodo, contando en cero los días sin ventas; en soles y sin ventas anuladas. " +
 			"No es el ticket promedio por venta: no hay número de ventas.",
 		Arguments: arguments("period?", "products?", "clients?", "categories?", "sites?"),
 		Examples: []string{"cuánto vendo en promedio al día", "promedio diario de ventas", "venta media por día", "en promedio cuánto vendemos diario",
@@ -87,7 +92,8 @@ var salesFunctions = []Function{
 		Arguments: arguments("period?", "clients?", "categories?", "sites?", "top?", "rank_by?"),
 		Examples: []string{"productos más vendidos", "top de productos", "ranking de productos por ventas", "qué producto se vende más",
 			"productos con más unidades vendidas", "qué productos le vendí a un cliente", "productos más vendidos de una categoría",
-			"cuánto vendí de cada producto", "productos estrella"},
+			"cuánto vendí de cada producto", "productos estrella",
+			"monto vendido por producto"},
 		Message: "Productos más vendidos {periodo}{filtros}, ordenados {orden}.",
 		run: func(call *functionCall) (shownResult, error) {
 			return call.ranking("product_id", []string{"amount", "quantity"}, call.rankBy, call.top)
@@ -96,11 +102,13 @@ var salesFunctions = []Function{
 	{
 		Name: "sales_by_client", Domain: "sales", Access: salesAccess,
 		Title: "Ventas por cliente", Gist: "ranking de clientes por monto comprado",
-		Description: "Ranking de clientes por el monto que compraron en el periodo, en soles y sin ventas anuladas; las ventas sin cliente salen como «(ninguno)». " +
+		Description: "Quién compró y cuánto: ranking de clientes por el monto que compraron en el periodo, en soles y sin ventas anuladas; las ventas sin cliente salen como «(ninguno)». " +
 			"No hay datos por cliente y sede a la vez, ni número de compras.",
 		Arguments: arguments("period?", "products?", "categories?", "top?"),
 		Examples: []string{"mejores clientes", "clientes que más compran", "top de clientes", "ranking de clientes por compras", "quién me compra más",
-			"clientes que más compraron un producto", "a quién le vendí más", "principales clientes por monto"},
+			"clientes que más compraron un producto", "a quién le vendí más", "principales clientes por monto",
+			"a qué clientes les vendí un producto", "compradores de un producto", "monto comprado por cada cliente", "ranking de compradores",
+			"clientes que más gastan", "clientes con más compras en soles"},
 		Message: "Clientes que más compraron {periodo}{filtros}.",
 		run: func(call *functionCall) (shownResult, error) {
 			return call.ranking("client_id", []string{"amount"}, "amount", call.top)
@@ -128,7 +136,9 @@ var salesFunctions = []Function{
 			"No hay datos por sede y cliente a la vez.",
 		Arguments: arguments("period?", "products?", "categories?"),
 		Examples: []string{"ventas por sede", "qué sede vende más", "ventas de cada local", "cuánto vendió cada tienda", "ranking de sedes",
-			"ventas por sucursal", "comparar las sedes en ventas", "en qué local se vende más un producto"},
+			"ventas por sucursal", "comparar las sedes en ventas", "en qué local se vende más un producto",
+			"monto de ventas de cada sede", "total vendido por sede",
+			"ventas totales de cada sede"},
 		Message: "Ventas por sede {periodo}{filtros}: {valor} en total.",
 		run: func(call *functionCall) (shownResult, error) {
 			shown, err := call.ranking("site_id", []string{"amount"}, "amount", MaxTableRows)
@@ -153,7 +163,8 @@ var salesFunctions = []Function{
 		Arguments:   arguments("period?", "products?", "categories?"),
 		Examples: []string{"porcentaje de ventas por sede", "participación de cada sede", "qué parte de las ventas hace cada local",
 			"cuánto aporta cada tienda al total", "peso de cada sucursal en las ventas", "distribución de las ventas entre sedes",
-			"porcentaje que vende cada local", "share de ventas por sede"},
+			"porcentaje que vende cada local", "share de ventas por sede",
+			"cuánto representa cada sede del total", "porcentaje del total de cada sucursal"},
 		Message: "Participación de las sedes en las ventas {periodo}{filtros}, de un total de {valor}.",
 		run:     func(call *functionCall) (shownResult, error) { return call.share("site_id", MaxTableRows) },
 	},
@@ -208,7 +219,9 @@ var salesFunctions = []Function{
 		Arguments: arguments("clients", "period?", "products?"),
 		Examples: []string{"compras mensuales de unos clientes", "cuánto me compró cada mes un cliente", "evolución mensual de un cliente",
 			"comparar clientes mes a mes", "compras por mes de varios clientes", "cómo viene comprando un cliente cada mes",
-			"historial mensual de compras de clientes", "gráfico mensual por cliente"},
+			"historial mensual de compras de clientes", "gráfico mensual por cliente",
+			"compras de cada cliente mes a mes", "cuánto compra un cliente por mes",
+			"ventas mensuales a un cliente"},
 		Message: "Compras mensuales por cliente {periodo}{filtros}.",
 		run: func(call *functionCall) (shownResult, error) {
 			return call.timelinePerRecord("MONTH(date)", "client_id", "amount", "bar")
@@ -249,42 +262,47 @@ var salesFunctions = []Function{
 	{
 		Name: "sales_vs_previous_period", Domain: "sales", Access: salesAccess,
 		Title: "Ventas frente al periodo anterior", Gist: "total vendido comparado con otro periodo, con diferencia y variación",
-		Description: "Compara el monto vendido en el periodo con el de otro periodo, por defecto el de igual duración justo antes: ambos totales, " +
+		Description: "Crecimiento o caída de las ventas: compara el monto vendido en el periodo con el de otro periodo, por defecto el de igual duración justo antes: ambos totales, " +
 			"la diferencia y la variación en porcentaje; en soles y sin ventas anuladas. No combina clientes con sedes.",
 		Arguments: arguments("period?", "compare_period?", "products?", "clients?", "categories?", "sites?"),
 		Examples: []string{"comparar las ventas con el periodo anterior", "vendí más o menos que antes", "crecieron las ventas", "variación de las ventas",
-			"cuánto subieron o bajaron las ventas", "ventas frente al mes anterior", "comparación de ventas entre dos periodos", "cayeron las ventas"},
+			"cuánto subieron o bajaron las ventas", "ventas frente al mes anterior", "comparación de ventas entre dos periodos", "cayeron las ventas",
+			"crecimiento de las ventas frente al periodo anterior", "variación porcentual de las ventas", "cuánto crecimos en ventas"},
 		Message: "Ventas {periodo} comparadas con las {comparado}{filtros}: {valor}.",
 		run:     func(call *functionCall) (shownResult, error) { return call.compareTotals() },
 	},
 	{
 		Name: "sales_by_product_vs_previous_period", Domain: "sales", Access: salesAccess,
 		Title: "Ventas por producto frente al periodo anterior", Gist: "monto de cada producto en ambos periodos y su variación",
-		Description: "Por producto, el monto vendido en el periodo y en otro periodo, por defecto el de igual duración justo antes, con la variación en porcentaje; " +
+		Description: "Crecimiento o caída de cada producto: el monto vendido en el periodo y en otro periodo, por defecto el de igual duración justo antes, con la variación en porcentaje; " +
 			"en soles y sin ventas anuladas. No combina clientes con sedes.",
 		Arguments: arguments("period?", "compare_period?", "clients?", "categories?", "sites?", "top?"),
 		Examples: []string{"qué productos crecieron en ventas", "productos que bajaron sus ventas", "comparar las ventas por producto con el periodo anterior",
 			"variación de ventas por producto", "productos que más subieron", "cómo cambió la venta de cada producto", "productos con caída de ventas",
-			"comparativo de productos entre dos periodos"},
+			"comparativo de productos entre dos periodos",
+			"variación porcentual de cada producto frente al periodo anterior", "crecimiento de las ventas de cada producto", "productos cuya venta cayó o subió",
+			"comparativo de ventas por producto frente a otro periodo"},
 		Message: "Ventas por producto {periodo} comparadas con las {comparado}{filtros}.",
 		run:     func(call *functionCall) (shownResult, error) { return call.compareByRecord("product_id", call.top) },
 	},
 	{
 		Name: "sales_by_client_vs_previous_period", Domain: "sales", Access: salesAccess,
 		Title: "Compras por cliente frente al periodo anterior", Gist: "compras de cada cliente en ambos periodos y su variación",
-		Description: "Por cliente, el monto que compró en el periodo y en otro periodo, por defecto el de igual duración justo antes, con la variación en porcentaje; " +
+		Description: "Crecimiento o caída de cada cliente: el monto que compró en el periodo y en otro periodo, por defecto el de igual duración justo antes, con la variación en porcentaje; " +
 			"en soles y sin ventas anuladas. No hay datos por cliente y sede a la vez.",
 		Arguments: arguments("period?", "compare_period?", "products?", "top?"),
 		Examples: []string{"qué clientes compraron menos que antes", "clientes que aumentaron sus compras", "comparar las compras por cliente con el periodo anterior",
 			"variación de compras por cliente", "clientes que bajaron sus compras", "cómo cambiaron las compras de cada cliente",
-			"comparativo de clientes entre dos periodos", "clientes que crecieron"},
+			"comparativo de clientes entre dos periodos", "clientes que crecieron",
+			"variación porcentual de las compras de cada cliente", "crecimiento de las compras de cada cliente", "clientes cuyas compras cayeron",
+			"variación de lo que compró cada cliente", "comparar lo vendido a cada cliente con otro periodo"},
 		Message: "Compras por cliente {periodo} comparadas con las {comparado}{filtros}.",
 		run:     func(call *functionCall) (shownResult, error) { return call.compareByRecord("client_id", call.top) },
 	},
 	{
 		Name: "sales_by_category_vs_previous_period", Domain: "sales", Access: salesAccess,
 		Title: "Ventas por categoría frente al periodo anterior", Gist: "monto de cada categoría en ambos periodos y su variación",
-		Description: "Por categoría de producto, el monto vendido en el periodo y en otro periodo, por defecto el de igual duración justo antes, con la variación; " +
+		Description: "Crecimiento o caída de cada categoría de producto: el monto vendido en el periodo y en otro periodo, por defecto el de igual duración justo antes, con la variación; " +
 			"en soles y sin ventas anuladas. Un producto en dos categorías cuenta en ambas, así que las categorías suman más que el total.",
 		Arguments: arguments("period?", "compare_period?", "sites?", "top?"),
 		Examples: []string{"qué categorías crecieron", "categorías que bajaron sus ventas", "comparar las ventas por categoría con el periodo anterior",
@@ -300,12 +318,14 @@ var salesFunctions = []Function{
 	{
 		Name: "sales_by_site_vs_previous_period", Domain: "sales", Access: salesAccess,
 		Title: "Ventas por sede frente al periodo anterior", Gist: "monto de cada sede en ambos periodos y su variación",
-		Description: "Por sede, el monto vendido en el periodo y en otro periodo, por defecto el de igual duración justo antes, con la variación en porcentaje; " +
+		Description: "Crecimiento o caída de cada sede: el monto vendido en el periodo y en otro periodo, por defecto el de igual duración justo antes, con la variación en porcentaje; " +
 			"en soles y sin ventas anuladas. No hay datos por sede y cliente a la vez.",
 		Arguments: arguments("period?", "compare_period?", "products?"),
 		Examples: []string{"qué sede creció más", "sedes que bajaron sus ventas", "comparar las ventas por sede con el periodo anterior",
 			"variación de ventas por local", "cómo cambiaron las ventas de cada tienda", "sucursales con caída de ventas",
-			"comparativo de sedes entre dos periodos", "locales que más subieron"},
+			"comparativo de sedes entre dos periodos", "locales que más subieron",
+			"crecimiento de las ventas de cada sede", "variación porcentual por sede",
+			"variación de lo vendido en cada local"},
 		Message: "Ventas por sede {periodo} comparadas con las {comparado}{filtros}.",
 		run:     func(call *functionCall) (shownResult, error) { return call.compareByRecord("site_id", MaxTableRows) },
 	},
@@ -349,7 +369,9 @@ var salesFunctions = []Function{
 			"No es la deuda total del cliente: las ventas de otros periodos no cuentan; no combina clientes con sedes.",
 		Arguments: arguments("period?", "products?", "clients?", "categories?", "sites?"),
 		Examples: []string{"cuánto me deben de las ventas", "ventas pendientes de cobro", "monto por cobrar de las ventas", "cuánto falta cobrar",
-			"ventas al crédito sin pagar", "cuánto no me han pagado", "saldo pendiente de las ventas", "cuánto me debe un cliente por sus compras"},
+			"ventas al crédito sin pagar", "cuánto no me han pagado", "saldo pendiente de las ventas", "cuánto me debe un cliente por sus compras",
+			"total pendiente de cobro", "monto adeudado de las ventas",
+			"total de ventas sin cobrar"},
 		Message: "Por cobrar de las ventas {periodo}{filtros}: {valor}.",
 		run:     func(call *functionCall) (shownResult, error) { return call.total("debt_amount") },
 	},
@@ -360,7 +382,9 @@ var salesFunctions = []Function{
 			"No es la deuda total del cliente: las ventas de otros periodos no cuentan.",
 		Arguments: arguments("period?", "products?", "top?"),
 		Examples: []string{"quién me debe", "clientes que deben", "clientes con ventas por cobrar", "ranking de deudores", "qué clientes no han pagado",
-			"cuánto debe cada cliente por las ventas", "clientes con saldo pendiente", "deudas de clientes por ventas"},
+			"cuánto debe cada cliente por las ventas", "clientes con saldo pendiente", "deudas de clientes por ventas",
+			"clientes deudores", "cuánto me debe cada cliente",
+			"clientes con deuda"},
 		Message: "Clientes con ventas por cobrar {periodo}{filtros}: {valor} en total.",
 		run: func(call *functionCall) (shownResult, error) {
 			return call.ranking("client_id", []string{"debt_amount"}, "debt_amount", call.top)
@@ -374,7 +398,8 @@ var salesFunctions = []Function{
 		Arguments: arguments("period?", "clients?"),
 		Examples: []string{"por cobrar por semana", "de qué semanas son las ventas sin pagar", "ventas no pagadas por semana", "deuda de ventas semana a semana",
 			"evolución semanal de lo pendiente de cobro", "cuánto falta cobrar de cada semana", "gráfico semanal de ventas por cobrar",
-			"saldo pendiente de cada semana de ventas"},
+			"saldo pendiente de cada semana de ventas",
+			"ventas sin cobrar de cada semana", "por cobrar según la semana de venta", "semanas con ventas impagas"},
 		Message: "Por cobrar de las ventas de cada semana {periodo}{filtros}: {valor} en total.",
 		run: func(call *functionCall) (shownResult, error) {
 			return call.timeline("WEEK(date)", "debt_amount", "bar")
@@ -403,7 +428,9 @@ var salesFunctions = []Function{
 			"No combina clientes con sedes.",
 		Arguments: arguments("period?", "clients?", "sites?", "top?"),
 		Examples: []string{"productos pendientes de entrega", "qué falta entregar", "unidades por despachar", "pedidos sin entregar por producto",
-			"qué productos se deben entregar", "mercadería vendida no entregada", "pendientes de despacho", "cuánto falta entregar de cada producto"},
+			"qué productos se deben entregar", "mercadería vendida no entregada", "pendientes de despacho", "cuánto falta entregar de cada producto",
+			"productos con entregas pendientes", "unidades pendientes de entrega de cada producto", "lo que falta despachar por producto",
+			"productos que aún no se entregan", "cuánto queda por entregar de cada producto"},
 		Message: "Unidades por entregar de las ventas {periodo}{filtros}, por producto.",
 		run: func(call *functionCall) (shownResult, error) {
 			return call.ranking("product_id", []string{"pending_quantity"}, "pending_quantity", call.top)
@@ -417,7 +444,9 @@ var salesFunctions = []Function{
 		Arguments: arguments("period?", "clients?", "products?"),
 		Examples: []string{"qué le falta entregar a cada cliente", "entregas pendientes por cliente", "clientes con productos por entregar",
 			"qué le debo entregar a un cliente", "despachos pendientes por cliente", "pendientes de entrega de cada cliente",
-			"productos por entregar a clientes", "lista de entregas pendientes por cliente"},
+			"productos por entregar a clientes", "lista de entregas pendientes por cliente",
+			"unidades pendientes de entrega de un cliente",
+			"productos pendientes de entregar a un cliente"},
 		Message: "Unidades por entregar de las ventas {periodo}{filtros}, por cliente y producto.",
 		run: func(call *functionCall) (shownResult, error) {
 			return call.ranking("client_id, product_id", []string{"pending_quantity"}, "pending_quantity", MaxTableRows)
@@ -431,7 +460,9 @@ var salesFunctions = []Function{
 		Arguments: arguments("period?", "sites?", "products?"),
 		Examples: []string{"qué falta entregar en cada sede", "entregas pendientes por local", "productos por despachar en cada tienda",
 			"pendientes de entrega por sucursal", "despachos pendientes de una sede", "unidades por entregar por local y producto",
-			"qué debe entregar cada sede", "lista de pendientes por sede"},
+			"qué debe entregar cada sede", "lista de pendientes por sede",
+			"unidades por despachar de cada almacén",
+			"almacenes con productos por entregar"},
 		Message: "Unidades por entregar de las ventas {periodo}{filtros}, por sede y producto.",
 		run: func(call *functionCall) (shownResult, error) {
 			return call.ranking("site_id, product_id", []string{"pending_quantity"}, "pending_quantity", MaxTableRows)
@@ -445,7 +476,8 @@ var salesFunctions = []Function{
 		Arguments: arguments("products", "period?", "sites?"),
 		Examples: []string{"pendientes de entrega por semana de un producto", "evolución semanal de lo no entregado", "unidades por entregar cada semana",
 			"de qué semanas son las entregas pendientes", "despachos pendientes semana a semana", "gráfico semanal de pendientes de entrega",
-			"cuánto falta entregar por semana de venta", "entregas atrasadas por semana"},
+			"cuánto falta entregar por semana de venta", "entregas atrasadas por semana",
+			"evolución de las entregas pendientes"},
 		Message: "Unidades por entregar por semana de venta {periodo}{filtros}.",
 		run: func(call *functionCall) (shownResult, error) {
 			return call.timelinePerRecord("WEEK(date)", "product_id", "pending_quantity", "line")
