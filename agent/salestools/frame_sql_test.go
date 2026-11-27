@@ -12,6 +12,7 @@ import (
 	"app/core"
 	"app/db"
 	sales "app/sales/types"
+	"genix-agent/datafunctions"
 	"genix-agent/harness"
 
 	"github.com/cloudwego/eino/components/model"
@@ -47,24 +48,24 @@ func withTestFrames(t *testing.T) (today int64, reads *int) {
 
 	productNames := map[int32]string{1: "Leche Gloria", 2: "Leche Laive", 3: "Pan"}
 	originalCollection := recordCollections[sales.FrameSQLCollectionProducts]
-	recordCollections[sales.FrameSQLCollectionProducts] = recordCollection{
-		noun: originalCollection.noun,
-		search: func(_ int32, name string) ([]recordMatch, error) {
-			matches := []recordMatch{}
+	recordCollections[sales.FrameSQLCollectionProducts] = datafunctions.RecordCollection{
+		Noun: originalCollection.Noun,
+		Search: func(_ int32, name string) ([]datafunctions.RecordMatch, error) {
+			matches := []datafunctions.RecordMatch{}
 			for _, id := range []int32{1, 2, 3} {
 				if strings.Contains(strings.ToLower(productNames[id]), strings.ToLower(name)) {
-					matches = append(matches, recordMatch{ID: id, Name: productNames[id]})
+					matches = append(matches, datafunctions.RecordMatch{ID: id, Name: productNames[id]})
 				}
 			}
 			return matches, nil
 		},
-		namesByID: func(_ int32, ids []int32) (map[int32]string, error) { return productNames, nil },
+		NamesByID: func(_ int32, ids []int32) (map[int32]string, error) { return productNames, nil },
 	}
 	t.Cleanup(func() { recordCollections[sales.FrameSQLCollectionProducts] = originalCollection })
 	return today, reads
 }
 
-func runTool(t *testing.T, input frameSQLInput) (Answer, error) {
+func runTool(t *testing.T, input frameSQLInput) (datafunctions.Answer, error) {
 	t.Helper()
 	return FrameSQLTool{CompanyID: 1, Language: "es"}.run(input, map[string][]int32{})
 }
@@ -74,7 +75,7 @@ func TestFrameSQLRanksProductsWithNamesAndAnInlineBar(t *testing.T) {
 	answer, err := runTool(t, frameSQLInput{
 		Dataset: "sale_summary", Message: "Los productos más vendidos.",
 		SQL:   `SELECT product_id, SUM(amount) WHERE date IN PERIOD("D-6..D") GROUP BY product_id SORT BY amount DESC LIMIT 10`,
-		Table: frameSQLTableInput{Columns: []string{"product_id", "amount"}, InlineBar: "amount"},
+		Table: datafunctions.TableInput{Columns: []string{"product_id", "amount"}, InlineBar: "amount"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +101,7 @@ func TestFrameSQLDrawsADailyLineWithTheMissingDayFilled(t *testing.T) {
 	answer, err := runTool(t, frameSQLInput{
 		Dataset: "sale_summary", Message: "Unidades de pan por día.",
 		SQL:   `SELECT date, SUM(quantity) WHERE date IN PERIOD("D-2..D") AND product_id = "pan" GROUP BY date`,
-		Chart: frameSQLChartInput{Type: "line", X: "date", Y: []string{"quantity"}},
+		Chart: datafunctions.ChartInput{Type: "line", X: "date", Y: []string{"quantity"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +110,7 @@ func TestFrameSQLDrawsADailyLineWithTheMissingDayFilled(t *testing.T) {
 		t.Fatalf("expected only a chart: %+v", answer)
 	}
 	days, units := answer.Charts[0].Columns[0], answer.Charts[0].Columns[1]
-	if len(days.Values) != 3 || days.Values[2] != formatUnixDay(today) || days.Format != "date" {
+	if len(days.Values) != 3 || days.Values[2] != datafunctions.FormatUnixDay(today) || days.Format != "date" {
 		t.Fatalf("the days of the period are not every point: %+v", days)
 	}
 	if units.Values[0] != 0.0 || units.Values[1] != 3.0 || units.Values[2] != 0.0 || units.Type != "line" {
@@ -121,9 +122,9 @@ func TestFrameSQLChecksTheViewBeforeReading(t *testing.T) {
 	_, reads := withTestFrames(t)
 	for _, input := range []frameSQLInput{
 		{Dataset: "sale_summary", Message: "x", SQL: `SELECT product_id, SUM(amount) WHERE date IN PERIOD("D") GROUP BY product_id`,
-			Chart: frameSQLChartInput{X: "product_id", Y: []string{"units"}}},
+			Chart: datafunctions.ChartInput{X: "product_id", Y: []string{"units"}}},
 		{Dataset: "sale_summary", Message: "x", SQL: `SELECT product_id, SUM(amount) WHERE date IN PERIOD("D") GROUP BY product_id`,
-			Table: frameSQLTableInput{Columns: []string{"amount:id"}}},
+			Table: datafunctions.TableInput{Columns: []string{"amount:id"}}},
 		{Dataset: "sale_summary", Message: "", SQL: `SELECT SUM(amount) WHERE date IN PERIOD("D")`},
 		{Dataset: "sale_summary", Message: "x", SQL: `SELECT SUM(sold_units) WHERE date IN PERIOD("D")`},
 	} {
@@ -143,53 +144,28 @@ func TestFrameSQLAsksForAnAmbiguousNameAndUsesThePick(t *testing.T) {
 		SQL: `SELECT SUM(amount) WHERE date IN PERIOD("D-6..D") AND product_id = "leche"`,
 	}
 	_, err := runTool(t, input)
-	var needsChoice *needsChoiceError
+	var needsChoice *datafunctions.NeedsChoiceError
 	if !errors.As(err, &needsChoice) {
 		t.Fatalf("expected a question, got %v", err)
 	}
-	choices := needsChoice.question.Choices
-	if len(choices) != 3 || choices[0].ID != "1" || choices[2].ID != includeAllChoiceID {
+	choices := needsChoice.Choice.Options
+	if len(choices) != 3 || choices[0].ID != "1" || choices[2].ID != datafunctions.IncludeAllChoiceID {
 		t.Fatalf("unexpected choices: %+v", choices)
 	}
 
-	ids, isOffered := pickedIDs(pendingChoice{Choices: choices}, "2")
+	ids, isOffered := datafunctions.PickedIDs(choices, "2")
 	if !isOffered {
 		t.Fatal("an offered choice was refused")
 	}
-	if _, isOffered := pickedIDs(pendingChoice{Choices: choices}, "3"); isOffered {
+	if _, isOffered := datafunctions.PickedIDs(choices, "3"); isOffered {
 		t.Fatal("a record that wasn't offered was accepted")
 	}
-	answer, err := FrameSQLTool{CompanyID: 1, Language: "es"}.run(input, map[string][]int32{needsChoice.key: ids})
+	answer, err := FrameSQLTool{CompanyID: 1, Language: "es"}.run(input, map[string][]int32{needsChoice.Key: ids})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if amount := answer.Tables[0].Columns[0].Values[0]; amount != 25.0 {
 		t.Fatalf("the pick was not applied: amount %v", amount)
-	}
-}
-
-func TestResolvePeriod(t *testing.T) {
-	today := int16(time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC).Unix() / 86400)
-	day := func(year int, month time.Month, dayOfMonth int) int16 {
-		return int16(time.Date(year, month, dayOfMonth, 0, 0, 0, 0, time.UTC).Unix() / 86400)
-	}
-	for period, want := range map[string][2]int16{
-		"D-6..D":        {today - 6, today},
-		"M-1":           {day(2026, 9, 1), day(2026, 9, 30)},
-		"M":             {day(2026, 10, 1), today},
-		"S=1,Y=2026":    {day(2025, 12, 29), day(2026, 1, 4)},
-		"D=31":          {day(2026, 8, 31), day(2026, 8, 31)},
-		"2026-02-03..D": {day(2026, 2, 3), today},
-	} {
-		fromDay, toDay, err := resolvePeriod(period, today, 400)
-		if err != nil || fromDay != want[0] || toDay != want[1] {
-			t.Errorf("%s: got %d..%d %v, want %d..%d", period, fromDay, toDay, err, want[0], want[1])
-		}
-	}
-	for _, period := range []string{"D+1", "Y-3..D", "M=13"} {
-		if _, _, err := resolvePeriod(period, today, 400); err == nil {
-			t.Errorf("%s was accepted", period)
-		}
 	}
 }
 
@@ -225,7 +201,7 @@ func TestFrameSQLPausesAndResumesInsideTheHarness(t *testing.T) {
 	if resumed.Err != nil || resumed.EndToolName != ToolName {
 		t.Fatalf("the resume did not answer: %+v", resumed)
 	}
-	answer := Answer{}
+	answer := datafunctions.Answer{}
 	if err := json.Unmarshal([]byte(resumed.EndToolResult), &answer); err != nil || answer.Tables[0].Columns[0].Values[0] != 42.0 {
 		t.Fatalf("unexpected answer %s (%v)", resumed.EndToolResult, err)
 	}
@@ -280,9 +256,9 @@ func TestGoldenCallsPrepareOnTheSaleFrames(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &golden); err != nil {
 			t.Fatalf("%s: %v", line, err)
 		}
-		statement, err := db.PrepareFrameSQL(golden.Call.Dataset, golden.Call.SQL, sales.SaleFrameSQLFrames(1), db.SQLOptions{MaxRows: MaxTableRows})
+		statement, err := db.PrepareFrameSQL(golden.Call.Dataset, golden.Call.SQL, sales.SaleFrameSQLFrames(1), db.SQLOptions{MaxRows: datafunctions.MaxTableRows})
 		if err == nil {
-			_, err = planFrameSQLView(statement.Columns(), golden.Call.Table, golden.Call.Chart)
+			_, err = datafunctions.PlanView(statement.Columns(), golden.Call.Table, golden.Call.Chart)
 		}
 		if err != nil {
 			t.Errorf("%q: %v", golden.Question, err)

@@ -1,7 +1,8 @@
-package salestools
+package datafunctions
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,70 +15,77 @@ import (
 	"app/db"
 	production "app/production/types"
 	sales "app/sales/types"
-	"genix-agent/harness"
 )
 
-// A name in quotes in a statement's WHERE ("leche gloria") is looked up in the column's text
-// search: a confident match resolves it, an ambiguous one pauses the turn with a choice question
-// (harness.ChoiceQuestion), and the resumed call reads the user's pick from the tool's state.
+// A record name the user wrote ("leche gloria") is looked up in its collection's text search: a
+// confident match resolves it, a name nothing matches is an error for the model, and an ambiguous one
+// becomes a Choice for the user. The sales tool pauses its Eino turn with it; a data function returns
+// it as its Result and the pick comes back as "#<id>", which never resolves again.
 
 const (
 	// resolveSearchLimit is how many text-search hits a name's decision reads.
 	resolveSearchLimit = 20
 	// maxQuestionOptions keeps a choice question to 5 records, plus "Include all".
 	maxQuestionOptions = 5
-	// includeAllChoiceID is the choice that takes every record offered.
-	includeAllChoiceID = "all"
+	// IncludeAllChoiceID is the choice that takes every record offered.
+	IncludeAllChoiceID = "all"
 )
 
-// recordMatch is one active record a name may stand for.
-type recordMatch struct {
+// pickedRecordPattern is a record the user already picked: "#13".
+var pickedRecordPattern = regexp.MustCompile(`^#(\d{1,9})$`)
+
+// RecordMatch is one active record a name may stand for.
+type RecordMatch struct {
 	ID   int32
 	Name string
 	// Detail tells homonyms apart in the question (a client's RUC/DNI).
 	Detail string
 }
 
-// recordCollection finds and names the records of one FrameSQL record column.
-type recordCollection struct {
-	// noun names one record in a question, "English|Spanish".
-	noun string
-	// search returns the active records matching a name, best first.
-	search func(companyID int32, name string) ([]recordMatch, error)
-	// namesByID names a result's IDs, deleted records included: a past sale still shows its product.
-	namesByID func(companyID int32, ids []int32) (map[int32]string, error)
+// RecordCollection finds and names the records of one FrameSQL record column.
+type RecordCollection struct {
+	// Noun names one record in a question, "English|Spanish".
+	Noun string
+	// Search returns the active records matching a name, best first.
+	Search func(companyID int32, name string) ([]RecordMatch, error)
+	// NamesByID names a result's IDs, deleted records included: a past sale still shows its product.
+	NamesByID func(companyID int32, ids []int32) (map[int32]string, error)
 }
 
-var recordCollections = map[string]recordCollection{
-	sales.FrameSQLCollectionProducts:   {noun: "product|producto", search: searchProducts, namesByID: productNamesByID},
-	sales.FrameSQLCollectionClients:    {noun: "client|cliente", search: searchClients, namesByID: clientNamesByID},
-	sales.FrameSQLCollectionCategories: {noun: "category|categoría", search: searchCategories, namesByID: categoryNamesByID},
-	sales.FrameSQLCollectionSites:      {noun: "site|sede", search: searchSites, namesByID: siteNamesByID},
+// DatabaseRecordCollections are the sale frames' record collections read from the database; tests and
+// genix-local-ai pass collections in memory instead.
+func DatabaseRecordCollections() map[string]RecordCollection {
+	return map[string]RecordCollection{
+		sales.FrameSQLCollectionProducts:   {Noun: "product|producto", Search: searchProducts, NamesByID: productNamesByID},
+		sales.FrameSQLCollectionClients:    {Noun: "client|cliente", Search: searchClients, NamesByID: clientNamesByID},
+		sales.FrameSQLCollectionCategories: {Noun: "category|categoría", Search: searchCategories, NamesByID: categoryNamesByID},
+		sales.FrameSQLCollectionSites:      {Noun: "site|sede", Search: searchSites, NamesByID: siteNamesByID},
+	}
 }
 
-func searchProducts(companyID int32, name string) ([]recordMatch, error) {
+func searchProducts(companyID int32, name string) ([]RecordMatch, error) {
 	products := []production.Product{}
 	if _, err := db.SearchText(&products, companyID, name, resolveSearchLimit, 0); err != nil {
 		return nil, fmt.Errorf("search products for %q: %w", name, err)
 	}
-	matches := make([]recordMatch, len(products))
+	matches := make([]RecordMatch, len(products))
 	for i, product := range products {
-		matches[i] = recordMatch{ID: product.ID, Name: product.Name}
+		matches[i] = RecordMatch{ID: product.ID, Name: product.Name}
 	}
 	return matches, nil
 }
 
 // searchClients reads the ClientProvider index (D10: Name + RegistryNumber), which holds providers
 // too: only clients are sale records.
-func searchClients(companyID int32, name string) ([]recordMatch, error) {
+func searchClients(companyID int32, name string) ([]RecordMatch, error) {
 	clientsAndProviders := []crm.ClientProvider{}
 	if _, err := db.SearchText(&clientsAndProviders, companyID, name, resolveSearchLimit, 0); err != nil {
 		return nil, fmt.Errorf("search clients for %q: %w", name, err)
 	}
-	matches := []recordMatch{}
+	matches := []RecordMatch{}
 	for _, clientProvider := range clientsAndProviders {
 		if clientProvider.Type == crm.ClientProviderTypeClient {
-			matches = append(matches, recordMatch{ID: clientProvider.ID, Name: clientProvider.Name, Detail: clientProvider.RegistryNumber})
+			matches = append(matches, RecordMatch{ID: clientProvider.ID, Name: clientProvider.Name, Detail: clientProvider.RegistryNumber})
 		}
 	}
 	return matches, nil
@@ -85,16 +93,16 @@ func searchClients(companyID int32, name string) ([]recordMatch, error) {
 
 // searchCategories offers every active product category: they have no text search, and a company has
 // few, so classifyMatches picks among them all.
-func searchCategories(companyID int32, _ string) ([]recordMatch, error) {
+func searchCategories(companyID int32, _ string) ([]RecordMatch, error) {
 	categories := []business.SharedListRecord{}
 	query := db.Query(&categories)
 	query.Select(query.ID, query.Name).CompanyID.Equals(companyID).ListID.Equals(business.SharedListCategoryID).Status.Equals(1)
 	if err := query.Exec(); err != nil {
 		return nil, fmt.Errorf("read the product categories: %w", err)
 	}
-	matches := make([]recordMatch, len(categories))
+	matches := make([]RecordMatch, len(categories))
 	for i, category := range categories {
-		matches[i] = recordMatch{ID: category.ID, Name: category.Name}
+		matches[i] = RecordMatch{ID: category.ID, Name: category.Name}
 	}
 	return matches, nil
 }
@@ -115,16 +123,16 @@ func categoryNamesByID(companyID int32, ids []int32) (map[int32]string, error) {
 
 // searchSites offers every active site (sede): they have no text search, and a company has few, so
 // classifyMatches picks among them all.
-func searchSites(companyID int32, _ string) ([]recordMatch, error) {
+func searchSites(companyID int32, _ string) ([]RecordMatch, error) {
 	sites := []business.Site{}
 	query := db.Query(&sites)
 	query.Select(query.ID, query.Name).CompanyID.Equals(companyID).Status.Equals(1)
 	if err := query.Exec(); err != nil {
 		return nil, fmt.Errorf("read the sites: %w", err)
 	}
-	matches := make([]recordMatch, len(sites))
+	matches := make([]RecordMatch, len(sites))
 	for i, site := range sites {
-		matches[i] = recordMatch{ID: site.ID, Name: site.Name}
+		matches[i] = RecordMatch{ID: site.ID, Name: site.Name}
 	}
 	return matches, nil
 }
@@ -171,65 +179,107 @@ func clientNamesByID(companyID int32, ids []int32) (map[int32]string, error) {
 	return names, nil
 }
 
-// pendingChoice is the tool's interrupt state: the names the user already picked, and the question
-// asked now. A resumed call validates the answer against Choices: the browser echoes it back, and
-// is never trusted with an ID it wasn't offered.
-type pendingChoice struct {
-	// Picks are record IDs by name key (collection:normalized words).
-	Picks   map[string][]int32
-	Key     string
-	Choices []harness.Choice
+// Choice is a question for the user: which record a name stands for. The chat shows Options as
+// buttons (harness.Choice has the same fields); the browser echoes the picked ID back, and it is
+// checked against Options, never trusted as is.
+type Choice struct {
+	// Argument is the data function's argument holding the name ("products"); empty in the sales tool.
+	Argument string
+	// Name is the name as written.
+	Name     string
+	Question string
+	Options  []ChoiceOption
 }
 
-// needsChoiceError stops a run whose name lookup must ask the user. The tool turns it into Eino's
-// interrupt.
-type needsChoiceError struct {
-	key      string
-	question harness.ChoiceQuestion
+type ChoiceOption struct {
+	// ID is a record ID, or IncludeAllChoiceID.
+	ID    string
+	Label string
 }
 
-func (err *needsChoiceError) Error() string { return "asking the user: " + err.question.Question }
-
-// pickedIDs reads the user's answer to pending: the picked record, or every offered record.
-func pickedIDs(pending pendingChoice, answer string) ([]int32, bool) {
+// PickedIDs reads the user's answer to a choice: the picked record, or every offered record.
+func PickedIDs(options []ChoiceOption, answer string) ([]int32, bool) {
 	offeredIDs := []int32{}
-	for _, choice := range pending.Choices {
-		if id, err := strconv.ParseInt(choice.ID, 10, 32); err == nil {
+	for _, option := range options {
+		if id, err := strconv.ParseInt(option.ID, 10, 32); err == nil {
 			offeredIDs = append(offeredIDs, int32(id))
-			if choice.ID == answer {
+			if option.ID == answer {
 				return []int32{int32(id)}, true
 			}
 		}
 	}
-	if answer == includeAllChoiceID && slices.ContainsFunc(pending.Choices, func(choice harness.Choice) bool { return choice.ID == includeAllChoiceID }) {
+	if answer == IncludeAllChoiceID && slices.ContainsFunc(options, func(option ChoiceOption) bool { return option.ID == IncludeAllChoiceID }) {
 		return offeredIDs, true
 	}
 	return nil, false
 }
 
-// resolveNames turns the names of one record column into IDs: a pick first, then a confident
-// search, otherwise one question (the first ambiguous name; the resumed call asks the next). A name
-// nothing matches fails back to the model before anything is asked.
-func resolveNames(companyID int32, language string, collectionName string, names []string, picks map[string][]int32) ([]int32, error) {
-	collection, isKnown := recordCollections[collectionName]
+// PickedRecords is the answer as a data function's call writes it in place of the name: "#13", or
+// every offered record for "Incluir todos".
+func (choice Choice) PickedRecords(answer string) ([]string, bool) {
+	ids, isOffered := PickedIDs(choice.Options, answer)
+	records := make([]string, len(ids))
+	for i, id := range ids {
+		records[i] = "#" + strconv.Itoa(int(id))
+	}
+	return records, isOffered
+}
+
+// Summary is the tool message a paused turn keeps, so a typed reply ("la de 1 litro") can name the
+// record: "Pregunta | ¿Qué producto es «leche»? | #12 Leche Gloria 400 g; #13 Leche Gloria 1 L".
+func (choice Choice) Summary() string {
+	candidates := []string{}
+	for _, option := range choice.Options {
+		if option.ID != IncludeAllChoiceID {
+			candidates = append(candidates, "#"+option.ID+" "+option.Label)
+		}
+	}
+	return "Pregunta | " + choice.Question + " | " + strings.Join(candidates, "; ")
+}
+
+// NeedsChoiceError stops a run whose name lookup must ask the user. Key identifies the name
+// (collection:normalized words) for the sales tool's picks.
+type NeedsChoiceError struct {
+	Key    string
+	Choice Choice
+}
+
+func (err *NeedsChoiceError) Error() string { return "asking the user: " + err.Choice.Question }
+
+// ResolveNames turns the names of one record column into IDs: "#<id>" is a record already picked, a
+// pick of the sales tool's state comes next, then a confident search, otherwise one question (the
+// first ambiguous name; the resumed call asks the next). A name nothing matches fails back to the
+// model before anything is asked.
+func ResolveNames(collections map[string]RecordCollection, companyID int32, language string, collectionName string, names []string,
+	picks map[string][]int32) ([]int32, error) {
+
+	collection, isKnown := collections[collectionName]
 	if !isKnown {
 		return nil, fmt.Errorf("the column's records (%s) can't be looked up by name: filter it by ID", collectionName)
 	}
-	englishNoun, spanishNoun, _ := strings.Cut(collection.noun, "|")
+	englishNoun, spanishNoun, _ := strings.Cut(collection.Noun, "|")
 	resolvedIDs := []int32{}
 	unmatchedNames := []string{}
-	var firstQuestion *needsChoiceError
+	pickedIDs := []int32{}
+	var firstQuestion *NeedsChoiceError
 	for _, name := range names {
-		queryWords := normalizedWords(name)
-		if len(queryWords) == 0 {
-			return nil, fmt.Errorf("the %s name %q has no searchable word", englishNoun, name)
-		}
-		key := collectionName + ":" + strings.Join(queryWords, " ")
-		if pickedIDs, isPicked := picks[key]; isPicked {
-			resolvedIDs = append(resolvedIDs, pickedIDs...)
+		if match := pickedRecordPattern.FindStringSubmatch(strings.TrimSpace(name)); match != nil {
+			id, _ := strconv.ParseInt(match[1], 10, 32)
+			pickedIDs = append(pickedIDs, int32(id))
+			resolvedIDs = append(resolvedIDs, int32(id))
 			continue
 		}
-		matches, err := collection.search(companyID, name)
+		queryWords := normalizedWords(name)
+		if len(queryWords) == 0 {
+			return nil, fmt.Errorf(Localized(language, "el nombre de %s %q no tiene ninguna palabra que buscar", "the %s name %q has no searchable word"),
+				Localized(language, spanishNoun, englishNoun), name)
+		}
+		key := collectionName + ":" + strings.Join(queryWords, " ")
+		if statePicks, isPicked := picks[key]; isPicked {
+			resolvedIDs = append(resolvedIDs, statePicks...)
+			continue
+		}
+		matches, err := collection.Search(companyID, name)
 		if err != nil {
 			return nil, err
 		}
@@ -240,12 +290,26 @@ func resolveNames(companyID int32, language string, collectionName string, names
 		case decision.kind == matchConfident:
 			resolvedIDs = append(resolvedIDs, decision.confidentIDs...)
 		case firstQuestion == nil:
-			firstQuestion = &needsChoiceError{key: key, question: choiceQuestion(language, name, spanishNoun, englishNoun, decision)}
+			firstQuestion = &NeedsChoiceError{Key: key, Choice: choiceQuestion(language, name, spanishNoun, englishNoun, decision)}
+		}
+	}
+	// A picked ID must still name a record of the company: a model can write any number.
+	if len(pickedIDs) > 0 {
+		pickedNames, err := collection.NamesByID(companyID, pickedIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range pickedIDs {
+			if pickedNames[id] == "" {
+				unmatchedNames = append(unmatchedNames, "#"+strconv.Itoa(int(id)))
+			}
 		}
 	}
 	if len(unmatchedNames) > 0 {
-		return nil, fmt.Errorf("no %s matches %q: the search already ignores case, accents and a typo, so tell the user and ask them to check the name",
-			englishNoun, strings.Join(unmatchedNames, `", "`))
+		return nil, fmt.Errorf(Localized(language,
+			"no hay %s con el nombre «%s»: la búsqueda ya ignora mayúsculas, tildes y un error de tipeo, así que díselo al usuario y pídele revisar el nombre",
+			"no %s matches %q: the search already ignores case, accents and a typo, so tell the user and ask them to check the name"),
+			Localized(language, spanishNoun, englishNoun), strings.Join(unmatchedNames, Localized(language, "», «", `", "`)))
 	}
 	if firstQuestion != nil {
 		return nil, firstQuestion
@@ -253,10 +317,10 @@ func resolveNames(companyID int32, language string, collectionName string, names
 	return resolvedIDs, nil
 }
 
-func choiceQuestion(language, name, spanishNoun, englishNoun string, decision matchDecision) harness.ChoiceQuestion {
-	question := harness.ChoiceQuestion{Question: localized(language, "¿Qué "+spanishNoun+" es «"+name+"»?", "Which "+englishNoun+" is “"+name+"”?")}
+func choiceQuestion(language, name, spanishNoun, englishNoun string, decision matchDecision) Choice {
+	choice := Choice{Name: name, Question: Localized(language, "¿Qué "+spanishNoun+" es «"+name+"»?", "Which "+englishNoun+" is “"+name+"”?")}
 	if decision.kind == matchSuggested {
-		question.Question = localized(language, "No encontré «"+name+"». ¿Quisiste decir «"+decision.options[0].Name+"»?",
+		choice.Question = Localized(language, "No encontré «"+name+"». ¿Quisiste decir «"+decision.options[0].Name+"»?",
 			"Nothing matches “"+name+"”. Did you mean “"+decision.options[0].Name+"”?")
 	}
 	for _, option := range decision.options {
@@ -264,12 +328,12 @@ func choiceQuestion(language, name, spanishNoun, englishNoun string, decision ma
 		if option.Detail != "" {
 			label += " · " + option.Detail
 		}
-		question.Choices = append(question.Choices, harness.Choice{ID: strconv.Itoa(int(option.ID)), Label: label})
+		choice.Options = append(choice.Options, ChoiceOption{ID: strconv.Itoa(int(option.ID)), Label: label})
 	}
 	if len(decision.options) > 1 {
-		question.Choices = append(question.Choices, harness.Choice{ID: includeAllChoiceID, Label: localized(language, "Incluir todos", "Include all")})
+		choice.Options = append(choice.Options, ChoiceOption{ID: IncludeAllChoiceID, Label: Localized(language, "Incluir todos", "Include all")})
 	}
-	return question
+	return choice
 }
 
 type matchKind int8
@@ -284,7 +348,7 @@ const (
 type matchDecision struct {
 	kind         matchKind
 	confidentIDs []int32
-	options      []recordMatch
+	options      []RecordMatch
 }
 
 // classifyMatches decides whether a name names one record. The search ranks the hits, but its score
@@ -298,12 +362,12 @@ type matchDecision struct {
 //   - Ambiguous: the names holding every word exactly, or else the first hits, at most 5.
 //   - Suggested: a single candidate that misses a query word: ask "did you mean" instead of
 //     answering about another record.
-func classifyMatches(name string, matches []recordMatch) matchDecision {
+func classifyMatches(name string, matches []RecordMatch) matchDecision {
 	queryWords := normalizedWords(name)
 	bestMatchedCount := 0
 	matchedCountByID := map[int32]int{}
 	exactNameIDs := []int32{}
-	fullMatches := []recordMatch{}
+	fullMatches := []RecordMatch{}
 	for _, match := range matches {
 		nameWords := normalizedWords(match.Name)
 		exactCount, matchedCount := 0, 0
@@ -433,11 +497,4 @@ func normalizedWords(text string) []string {
 		}
 	}
 	return words
-}
-
-func localized(language, spanish, english string) string {
-	if language == "en" {
-		return english
-	}
-	return spanish
 }

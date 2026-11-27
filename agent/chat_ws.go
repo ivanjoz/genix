@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"app/core"
+	"genix-agent/datafunctions"
 	"genix-agent/genixbot"
 	"genix-agent/harness"
 	"genix-agent/llm"
 	"genix-agent/pagebuilder"
 	"genix-agent/routing"
-	"genix-agent/salestools"
 )
 
 // Chat is the user↔agent channel for the in-app widget. One turn is one
@@ -65,10 +65,10 @@ type ChatAgentReply struct {
 	// Pause is set when the turn stopped to ask (Choices) or ran out of time. The chat sends the
 	// next turn with Resume built from it, and the same turn continues from its checkpoint.
 	Pause *ChatTurnPause `json:",omitempty"`
-	// Tables and Charts are the sales tool's result (salestools). The browser stores them with the
+	// Tables and Charts are a data answer's (datafunctions.Answer). The browser stores them with the
 	// reply; they never go back to the model, the Summary does.
-	Tables []salestools.Table `json:",omitempty"`
-	Charts []salestools.Chart `json:",omitempty"`
+	Tables []datafunctions.Table `json:",omitempty"`
+	Charts []datafunctions.Chart `json:",omitempty"`
 }
 
 // ChatTurnPause is what the browser needs to resume a paused turn.

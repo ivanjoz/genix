@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"app/core"
+	"genix-agent/datafunctions"
 	"genix-agent/llm"
 	"genix-agent/salestools"
 )
@@ -163,13 +164,13 @@ func menuContainsRoute(menu []AgentMenuGroup, expectedRoute string) bool {
 // event. Pulled out so both the `finish` branch and the plain-text fallback
 // share the same exit path.
 func (s *AgentSession) completeTurn(message, summary string, tokens int32) error {
-	return s.completeAnswer(salestools.Answer{Message: message, Summary: summary}, tokens)
+	return s.completeAnswer(datafunctions.Answer{Message: message, Summary: summary}, tokens)
 }
 
 // completeAnswer closes the turn with an answer that may carry tables and charts. They go to the
 // browser, which stores them with the reply row; the server keeps the message and the summary,
 // which is all a later turn reads.
-func (s *AgentSession) completeAnswer(answer salestools.Answer, tokens int32) error {
+func (s *AgentSession) completeAnswer(answer datafunctions.Answer, tokens int32) error {
 	ts, err := saveAgentMessage(s, answer.Message, answer.Summary, tokens)
 	if err != nil {
 		return fmt.Errorf("persist agent message: %w", err)

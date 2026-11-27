@@ -15,9 +15,26 @@ const (
 	FrameSQLCollectionSites      = "sites"
 )
 
-// SaleFrameSQLFrames are the sale DataFrames of one company as FrameSQL reads them: the columns of
-// SaleSummaryFrame and SaleClientProductFrame, in their order.
+// SaleFrameSQLSources are the reads behind the sale datasets: the company's DataFrames in Genix, rows
+// in memory in tests and in genix-local-ai's synthetic company.
+type SaleFrameSQLSources struct {
+	SaleSummary       db.SQLSource
+	SaleClientProduct db.SQLSource
+	ProductCategories db.SQLSource
+}
+
+// SaleFrameSQLFrames are the sale DataFrames of one company as FrameSQL reads them.
 func SaleFrameSQLFrames(companyID int32) []db.SQLFrame {
+	return SaleFrameSQLFramesOver(SaleFrameSQLSources{
+		SaleSummary:       db.FrameSource[SaleOrder](companyID, "sale-summary"),
+		SaleClientProduct: db.FrameSource[SaleOrder](companyID, "sale-client-product"),
+		ProductCategories: db.FrameSource[production.Product](companyID, "product-categories"),
+	})
+}
+
+// SaleFrameSQLFramesOver declares the sale datasets over any sources: the columns of SaleSummaryFrame
+// and SaleClientProductFrame, in their order, and the category views over ProductCategoryFrame.
+func SaleFrameSQLFramesOver(sources SaleFrameSQLSources) []db.SQLFrame {
 	dateColumn := db.SQLColumn{Name: "date", Label: "Date|Fecha", Kind: db.SQLDay}
 	productColumn := db.SQLColumn{Name: "product_id", Label: "Product|Producto", Kind: db.SQLRef, Collection: FrameSQLCollectionProducts}
 	clientColumn := db.SQLColumn{Name: "client_id", Label: "Client|Cliente", Kind: db.SQLRef, Collection: FrameSQLCollectionClients}
@@ -31,11 +48,11 @@ func SaleFrameSQLFrames(companyID int32) []db.SQLFrame {
 	}
 	saleSummary := db.SQLFrame{
 		Name: "sale-summary", Keys: []db.SQLColumn{dateColumn, siteColumn}, Rows: []db.SQLColumn{productColumn}, Sums: sums,
-		Source: db.FrameSource[SaleOrder](companyID, "sale-summary"),
+		Source: sources.SaleSummary,
 	}
 	saleClientProduct := db.SQLFrame{
 		Name: "sale-client-product", Keys: []db.SQLColumn{dateColumn}, Rows: []db.SQLColumn{clientColumn, productColumn}, Sums: sums,
-		Source: db.FrameSource[SaleOrder](companyID, "sale-client-product"),
+		Source: sources.SaleClientProduct,
 	}
 	// The category views read each product's current categories (ProductCategoryFrame), so a product
 	// moved to another category moves its past sales too. A product without one is category 0.
@@ -45,7 +62,7 @@ func SaleFrameSQLFrames(companyID int32) []db.SQLFrame {
 		Column: db.SQLColumn{Name: "category_id", Label: "Category|Categoría", Kind: db.SQLRef, Collection: FrameSQLCollectionCategories},
 		// The company's whole frame is its one file, FileBucket 0.
 		Selection: db.SQLSelection{FromKey: 0, ToKey: 0},
-		Source:    db.FrameSource[production.Product](companyID, "product-categories"),
+		Source:    sources.ProductCategories,
 	}
 	return []db.SQLFrame{
 		saleSummary,

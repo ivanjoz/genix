@@ -1,4 +1,4 @@
-package salestools
+package datafunctions
 
 import (
 	"fmt"
@@ -8,12 +8,13 @@ import (
 	"time"
 )
 
-// A period is the text of PERIOD("…") in a small notation the model writes from the user's words
-// ("ayer" → D-1, "semana 23" → S=23). The model only translates; resolvePeriod does the calendar
-// math, which is where models slip (week numbers, month ends, days back across a month).
+// A period is a small notation the model writes from the user's words ("ayer" → D-1, "semana 23" →
+// S=23): the text of PERIOD("…") in the sales tool, the period arguments of a data function. The
+// model only translates; ResolvePeriod does the calendar math, which is where models slip (week
+// numbers, month ends, days back across a month).
 
-// periodNotation is the notation as the model reads it, in the sql argument's description.
-const periodNotation = `Write it in this notation; never compute dates. Units: D day, S ISO week (Monday to Sunday), M month, Y year.
+// PeriodNotation is the notation as the model reads it, in the sales tool's sql description.
+const PeriodNotation = `Write it in this notation; never compute dates. Units: D day, S ISO week (Monday to Sunday), M month, Y year.
 - D today, S this week, M this month, Y this year.
 - D-1 yesterday, D-4 four days ago, S-1 last week, M-1 last month, Y-1 last year.
 - D=15 the 15th, S=23 week 23, M=12 December, Y=2024 the year 2024. Combine with commas: M=12,Y=2024; S=23,Y=2025; D=15,M=3. Without the year (or month) it is the latest one that has started.
@@ -21,6 +22,9 @@ const periodNotation = `Write it in this notation; never compute dates. Units: D
 - A..B from the start of A to the end of B: D-6..D the last 7 days; M=1..M=3 January to March; D=5,M=3..D since March 5.
 - "la última semana", "los últimos 7 días" → D-6..D; "la semana pasada" → S-1. "el último mes", "los últimos 30 días" → D-29..D; "el mes pasado" → M-1.
 - The user gave no period → D-13..D (the last 14 days), unless this field says otherwise. Never a period that just started (S, M) for a request without one.`
+
+// DefaultPeriod is the period of a request that gives none: the last 14 days.
+const DefaultPeriod = "D-13..D"
 
 var (
 	relativePeriodPattern = regexp.MustCompile(`^([DSMY])(?:-(\d{1,5}))?$`)
@@ -31,44 +35,46 @@ var (
 // years back.
 const maxYearsBack = 8
 
-// resolvePeriod turns a period into UnixDays against todayUnixDay (core.FechaUnix, the effective
+// ResolvePeriod turns a period into UnixDays against todayUnixDay (core.FechaUnix, the effective
 // clock). The end is clipped to today: reports read the past, so "este mes" runs from the 1st to
-// today. Errors are written for the model, which fixes its call.
-func resolvePeriod(period string, todayUnixDay int16, maxDays int) (int16, int16, error) {
+// today. Errors are written for the model, in the turn's language, so it fixes its call.
+func ResolvePeriod(period string, todayUnixDay int16, maxDays int, language string) (int16, int16, error) {
 	today := time.Unix(int64(todayUnixDay)*86400, 0).UTC()
 	startText, endText, isRange := strings.Cut(period, "..")
 	if !isRange {
 		endText = startText
 	}
-	periodStart, _, err := resolvePeriodPart(strings.TrimSpace(startText), today)
+	periodStart, _, err := resolvePeriodPart(strings.TrimSpace(startText), today, language)
 	if err != nil {
 		return 0, 0, err
 	}
-	_, periodEnd, err := resolvePeriodPart(strings.TrimSpace(endText), today)
+	_, periodEnd, err := resolvePeriodPart(strings.TrimSpace(endText), today, language)
 	if err != nil {
 		return 0, 0, err
 	}
 	if periodStart.After(today) {
-		return 0, 0, fmt.Errorf("the period %q starts after today (%s): reports read the past", period, today.Format(time.DateOnly))
+		return 0, 0, fmt.Errorf(Localized(language, "el periodo %q empieza después de hoy (%s): los reportes leen el pasado",
+			"the period %q starts after today (%s): reports read the past"), period, today.Format(time.DateOnly))
 	}
 	if periodStart.Year() < 1970 {
-		return 0, 0, fmt.Errorf("the period %q starts before 1970", period)
+		return 0, 0, fmt.Errorf(Localized(language, "el periodo %q empieza antes de 1970", "the period %q starts before 1970"), period)
 	}
 	if periodEnd.After(today) {
 		periodEnd = today
 	}
 	if periodEnd.Before(periodStart) {
-		return 0, 0, fmt.Errorf("the period %q ends before it starts", period)
+		return 0, 0, fmt.Errorf(Localized(language, "el periodo %q termina antes de empezar", "the period %q ends before it starts"), period)
 	}
 	fromDay, toDay := int16(periodStart.Unix()/86400), int16(periodEnd.Unix()/86400)
 	if int(toDay-fromDay)+1 > maxDays {
-		return 0, 0, fmt.Errorf("the period %q spans %d days; this report reads at most %d", period, int(toDay-fromDay)+1, maxDays)
+		return 0, 0, fmt.Errorf(Localized(language, "el periodo %q abarca %d días; este reporte lee como máximo %d",
+			"the period %q spans %d days; this report reads at most %d"), period, int(toDay-fromDay)+1, maxDays)
 	}
 	return fromDay, toDay, nil
 }
 
 // resolvePeriodPart reads one side of a range: its first and last day.
-func resolvePeriodPart(text string, today time.Time) (time.Time, time.Time, error) {
+func resolvePeriodPart(text string, today time.Time, language string) (time.Time, time.Time, error) {
 	if fullDate, err := time.Parse(time.DateOnly, text); err == nil {
 		return fullDate, fullDate, nil
 	}
@@ -93,35 +99,39 @@ func resolvePeriodPart(text string, today time.Time) (time.Time, time.Time, erro
 		}
 	}
 	if absolutePeriodPattern.MatchString(text) {
-		return resolveAbsolutePeriod(text, today)
+		return resolveAbsolutePeriod(text, today, language)
 	}
-	return time.Time{}, time.Time{}, fmt.Errorf("%q is not a period: use D, S, M or Y alone, with -n or with =n (M=12,Y=2024), a YYYY-MM-DD date, or A..B", text)
+	return time.Time{}, time.Time{}, fmt.Errorf(Localized(language,
+		"%q no es un periodo: usa D, S, M o Y solos, con -n o con =n (M=12,Y=2024), una fecha AAAA-MM-DD, o A..B",
+		"%q is not a period: use D, S, M or Y alone, with -n or with =n (M=12,Y=2024), a YYYY-MM-DD date, or A..B"), text)
 }
 
 // resolveAbsolutePeriod reads "U=n" parts (M=12,Y=2024). Without the year, or the month for a day,
 // it is the latest one that has started, skipping what the calendar lacks: on October 3, D=31 is
 // August 31.
-func resolveAbsolutePeriod(text string, today time.Time) (time.Time, time.Time, error) {
+func resolveAbsolutePeriod(text string, today time.Time, language string) (time.Time, time.Time, error) {
+	valueRanges := Localized(language, "D 1-31, S 1-53, M 1-12, Y desde 1970", "D 1-31, S 1-53, M 1-12, Y from 1970")
 	values := map[string]int{}
 	for _, assignment := range strings.Split(text, ",") {
 		unit, number, _ := strings.Cut(assignment, "=")
 		if _, isRepeated := values[unit]; isRepeated {
-			return time.Time{}, time.Time{}, fmt.Errorf("%q gives %s twice", text, unit)
+			return time.Time{}, time.Time{}, fmt.Errorf(Localized(language, "%q da %s dos veces", "%q gives %s twice"), text, unit)
 		}
 		values[unit], _ = strconv.Atoi(number)
 		if values[unit] == 0 {
-			return time.Time{}, time.Time{}, fmt.Errorf("%q: %s=0 is not a value (D 1-31, S 1-53, M 1-12, Y from 1970)", text, unit)
+			return time.Time{}, time.Time{}, fmt.Errorf(Localized(language, "%q: %s=0 no es un valor (%s)", "%q: %s=0 is not a value (%s)"), text, unit, valueRanges)
 		}
 	}
 	// 0 below means "not given".
 	day, week, month, year := values["D"], values["S"], values["M"], values["Y"]
 	switch {
 	case week > 0 && (day > 0 || month > 0):
-		return time.Time{}, time.Time{}, fmt.Errorf("%q: S combines only with Y (S=23,Y=2025)", text)
+		return time.Time{}, time.Time{}, fmt.Errorf(Localized(language, "%q: S solo se combina con Y (S=23,Y=2025)", "%q: S combines only with Y (S=23,Y=2025)"), text)
 	case day > 0 && month == 0 && year > 0:
-		return time.Time{}, time.Time{}, fmt.Errorf("%q: a day with a year needs its month (D=15,M=3,Y=2025)", text)
+		return time.Time{}, time.Time{}, fmt.Errorf(Localized(language, "%q: un día con año necesita su mes (D=15,M=3,Y=2025)",
+			"%q: a day with a year needs its month (D=15,M=3,Y=2025)"), text)
 	case day > 31 || week > 53 || month > 12 || (year > 0 && year < 1970):
-		return time.Time{}, time.Time{}, fmt.Errorf("%q has a value out of range (D 1-31, S 1-53, M 1-12, Y from 1970)", text)
+		return time.Time{}, time.Time{}, fmt.Errorf(Localized(language, "%q tiene un valor fuera de rango (%s)", "%q has a value out of range (%s)"), text, valueRanges)
 	}
 
 	// D alone steps back by months, the rest by years.
@@ -136,7 +146,7 @@ func resolveAbsolutePeriod(text string, today time.Time) (time.Time, time.Time, 
 			return periodStart, periodEnd, nil
 		}
 	}
-	return time.Time{}, time.Time{}, fmt.Errorf("%q is not in the calendar", text)
+	return time.Time{}, time.Time{}, fmt.Errorf(Localized(language, "%q no está en el calendario", "%q is not in the calendar"), text)
 }
 
 // absolutePeriodAt is the candidate stepsBack periods (years, or months for a day alone) before the
@@ -176,4 +186,30 @@ func absolutePeriodAt(day, week, month, year, stepsBack int, today time.Time) (t
 
 func isoWeekMonday(day time.Time) time.Time {
 	return day.AddDate(0, 0, -((int(day.Weekday()) + 6) % 7))
+}
+
+// spanishMonths names the months in the messages of a data answer.
+var spanishMonths = [...]string{"enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"}
+
+// spanishPeriodWords says a resolved period the way a message reads it, always after "de":
+// "del 27 de noviembre de 2026", "de octubre de 2026", "de 2025", "del 17 al 23 de noviembre de 2026",
+// "del 28 de octubre al 27 de noviembre de 2026".
+func spanishPeriodWords(fromDay, toDay int16) string {
+	from, to := time.Unix(int64(fromDay)*86400, 0).UTC(), time.Unix(int64(toDay)*86400, 0).UTC()
+	monthName := func(day time.Time) string { return spanishMonths[day.Month()-1] }
+	isWholeMonth := from.Day() == 1 && to.AddDate(0, 0, 1).Day() == 1 && from.Year() == to.Year() && from.Month() == to.Month()
+	isWholeYear := from.YearDay() == 1 && to.Month() == 12 && to.Day() == 31 && from.Year() == to.Year()
+	switch {
+	case fromDay == toDay:
+		return fmt.Sprintf("del %d de %s de %d", from.Day(), monthName(from), from.Year())
+	case isWholeYear:
+		return fmt.Sprintf("de %d", from.Year())
+	case isWholeMonth:
+		return fmt.Sprintf("de %s de %d", monthName(from), from.Year())
+	case from.Year() != to.Year():
+		return fmt.Sprintf("del %d de %s de %d al %d de %s de %d", from.Day(), monthName(from), from.Year(), to.Day(), monthName(to), to.Year())
+	case from.Month() != to.Month():
+		return fmt.Sprintf("del %d de %s al %d de %s de %d", from.Day(), monthName(from), to.Day(), monthName(to), to.Year())
+	}
+	return fmt.Sprintf("del %d al %d de %s de %d", from.Day(), to.Day(), monthName(to), to.Year())
 }

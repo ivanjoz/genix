@@ -1,4 +1,4 @@
-// The sales tool's tables and charts (agent/salestools/answer.go), as the chat shows them. Values
+// A data answer's tables and charts (agent/datafunctions/answer.go), as the chat shows them. Values
 // arrive in display units (soles, not cents) and dates as "YYYY-MM-DD"; this file only formats and
 // lays them out. Pure: AgentAnswer.svelte renders what it returns.
 

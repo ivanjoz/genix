@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"app/core"
+	"genix-agent/datafunctions"
 	"genix-agent/harness"
 	"genix-agent/llm"
 	"genix-agent/routing"
@@ -189,7 +190,7 @@ func (s *AgentSession) runExecution(ctx context.Context, spec executionSpec, che
 		}
 		return s.completeTurn(message, summary, tokens)
 	case result.EndToolName == salestools.ToolName:
-		answer := salestools.Answer{}
+		answer := datafunctions.Answer{}
 		if err := json.Unmarshal([]byte(result.EndToolResult), &answer); err != nil {
 			return fmt.Errorf("decode the sales answer: %w", err)
 		}

@@ -1,13 +1,16 @@
-// Package salestools is the agent's sales FrameSQL tool (backend/genix-orm/dataframe/framesql/
-// FRAMESQL.md §6–7): the model writes one SQL statement over a sale DataFrame and how to show its
-// result, and the tool's answer — a message, a table, a chart — is the turn's reply, with no other
-// model call. Ported from berryapps' agenttools.
-package salestools
+// Package datafunctions is the catalog of data functions genix-bot finds with `search` and runs with
+// `call` (genix-local-ai plan 13): each function is a spec whose arguments follow one set of
+// conventions, and whose answer — a message, a table, a chart — is the turn's reply.
+//
+// It also holds what the Eino sales tool (salestools) shares with the catalog, in one copy: the
+// period notation and its resolver, record-name resolution, and the Answer with its table and chart
+// builders.
+package datafunctions
 
 import "time"
 
-// Answer is the tool's result when it answered. The agent sends it as the turn's reply; Summary is
-// what later turns read, since they never see the table.
+// Answer is a data answer: the agent sends it as the turn's reply; Summary is what later turns
+// read, since they never see the table.
 type Answer struct {
 	Message string
 	Summary string
@@ -55,8 +58,16 @@ type ChartColumn struct {
 	Format string `json:",omitempty"`
 }
 
-// formatUnixDay renders a UnixDay as "YYYY-MM-DD". The day number is already a calendar date, so it
+// FormatUnixDay renders a UnixDay as "YYYY-MM-DD". The day number is already a calendar date, so it
 // is read in UTC: no offset shifts it.
-func formatUnixDay(unixDay int64) string {
+func FormatUnixDay(unixDay int64) string {
 	return time.Unix(unixDay*86400, 0).UTC().Format(time.DateOnly)
+}
+
+// Localized picks the text of the answer's language: "en" or Spanish.
+func Localized(language, spanish, english string) string {
+	if language == "en" {
+		return english
+	}
+	return spanish
 }
