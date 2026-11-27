@@ -313,6 +313,20 @@ func TestArgumentErrorsGoBackToTheModel(t *testing.T) {
 	}
 }
 
+// A client's RUC or DNI names it, as the text search finds it by them; a number is never a prefix.
+func TestARegistryNumberNamesItsClient(t *testing.T) {
+	matches := []RecordMatch{{ID: 11, Name: "Comercial Andina SAC", Detail: "20123456789"}, {ID: 12, Name: "Bodega Rosita", Detail: "45678912"}}
+	for _, testCase := range []struct {
+		name    string
+		wantIDs []int32
+	}{{"20123456789", []int32{11}}, {"45678912", []int32{12}}, {"4567891", nil}} {
+		decision := classifyMatches(testCase.name, matches)
+		if !slices.Equal(decision.confidentIDs, testCase.wantIDs) {
+			t.Errorf("%s: %+v", testCase.name, decision)
+		}
+	}
+}
+
 // "Incluir todos" takes every record the name matches, not only the 5 the question offers: the one
 // that sold may be the sixth.
 func TestIncludeAllTakesEveryMatchedRecord(t *testing.T) {

@@ -359,7 +359,7 @@ type matchDecision struct {
 // classifyMatches decides whether a name names one record. The search ranks the hits, but its score
 // can't say "this is the one": the decision reads the hits' names against the words the user typed.
 // A name word holds a query word when it equals it or starts with it (exact), or is one edit away
-// (fuzzy, a typo the search tolerated).
+// (fuzzy, a typo the search tolerated); a client's RUC/DNI counts as a name word.
 //
 //   - Not found: no hit, or no name holds even half of the query words, fuzzy included.
 //   - Confident: exactly one name has the query's words and no other; else exactly one name holds
@@ -376,9 +376,11 @@ func classifyMatches(name string, matches []RecordMatch) matchDecision {
 	fullMatches := []RecordMatch{}
 	for _, match := range matches {
 		nameWords := normalizedWords(match.Name)
+		// A client's RUC/DNI (Detail) is indexed beside its name, so it names the client too.
+		searchedWords := append(slices.Clone(nameWords), normalizedWords(match.Detail)...)
 		exactCount, matchedCount := 0, 0
 		for _, queryWord := range queryWords {
-			switch bestWordMatch(queryWord, nameWords) {
+			switch bestWordMatch(queryWord, searchedWords) {
 			case wordMatchExact:
 				exactCount++
 				matchedCount++
