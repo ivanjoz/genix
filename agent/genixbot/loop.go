@@ -133,7 +133,9 @@ func RunTurn(ctx context.Context, model Model, page Page, facts Facts, history [
 			}
 			return result, nil
 		}
-		assistantMessage := llm.Message{Role: "assistant", ToolCalls: reply.ToolCalls}
+		// The step's reasoning stays for the rest of the turn: the first step's reasoning is the turn's
+		// plan (finish the view, then answer). LFM3's template drops it once a new user message comes.
+		assistantMessage := llm.Message{Role: "assistant", ToolCalls: reply.ToolCalls, ReasoningContent: reply.ReasoningContent}
 		result.Steps = append(result.Steps, assistantMessage)
 		messages = append(messages, assistantMessage)
 		for _, call := range reply.ToolCalls {

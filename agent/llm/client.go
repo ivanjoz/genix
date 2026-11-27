@@ -139,12 +139,15 @@ func apiKeyForProvider(provider string) string {
 // Message is the OpenAI-compatible chat message used in `messages[]`.
 // Content is empty when the assistant turn is purely tool calls;
 // ToolCallID is set on `role: "tool"` messages to link the result back to
-// the originating call.
+// the originating call. ReasoningContent is the <think> text llama.cpp
+// splits off an assistant reply; genix-bot sends it back on the later steps
+// of the same turn (LFM3's template renders it there).
 type Message struct {
-	Role       string     `json:"role" cb:"role,1"` // "system" | "user" | "assistant" | "tool"
-	Content    string     `json:"content" cb:"content,2"`
-	ToolCalls  []ToolCall `json:"tool_calls" cb:"tool_calls,3"`
-	ToolCallID string     `json:"tool_call_id" cb:"tool_call_id,4"`
+	Role             string     `json:"role" cb:"role,1"` // "system" | "user" | "assistant" | "tool"
+	Content          string     `json:"content" cb:"content,2"`
+	ToolCalls        []ToolCall `json:"tool_calls" cb:"tool_calls,3"`
+	ToolCallID       string     `json:"tool_call_id" cb:"tool_call_id,4"`
+	ReasoningContent string     `json:"reasoning_content,omitempty" cb:"reasoning_content,5"`
 }
 
 // Tool declares one callable function to the model. Parameters is a

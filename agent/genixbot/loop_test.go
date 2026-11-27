@@ -99,6 +99,19 @@ func TestRunTurnFillsTheFormAndAnswersWithDeltas(t *testing.T) {
 	}
 }
 
+// The reasoning of a step is sent back on the later steps of the turn: it is the turn's plan.
+func TestRunTurnKeepsTheStepReasoningWithinTheTurn(t *testing.T) {
+	firstStep := toolCall(ToolVer, nil)
+	firstStep.ReasoningContent = "Pide crear un cliente y estoy en Clientes: miro la página antes de llenar."
+	model := &scriptedModel{replies: []llm.Message{firstStep, {Role: "assistant", Content: "¿Cuál es su RUC?"}}}
+	if _, err := RunTurn(context.Background(), model, &formPage{current: listOutline}, nil, nil, "/crm/customers", "agrega un cliente", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := model.prompts[1][2].ReasoningContent; got != firstStep.ReasoningContent {
+		t.Fatalf("second prompt reasoning %q", got)
+	}
+}
+
 func TestRunTurnGuardsSaveUntilTheUserConfirmed(t *testing.T) {
 	unconfirmedSave := &scriptedModel{replies: []llm.Message{
 		toolCall(ToolHacer, map[string]string{"acciones": "137 click"}),
