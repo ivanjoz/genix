@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Calculate evaluates a `calcular` expression: decimal numbers, + - * / ^,
+// Calculate evaluates a `calc` expression: decimal numbers, + - * / ^,
 // parentheses and unary minus. The result is rounded half away from zero to 2 decimals.
 func Calculate(expression string) (float64, error) {
 	parser := &calcParser{text: strings.ReplaceAll(expression, " ", "")}
@@ -27,7 +27,7 @@ func Calculate(expression string) (float64, error) {
 	return math.Round(value*100) / 100, nil
 }
 
-// CalculateResult is the tool response of `calcular`.
+// CalculateResult is the tool response of `calc`.
 func CalculateResult(expression string) string {
 	value, err := Calculate(expression)
 	if err != nil {

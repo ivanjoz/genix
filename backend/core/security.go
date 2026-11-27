@@ -165,9 +165,9 @@ type EnvStruct struct {
 	// LOCAL_MODEL_URL is the OpenAI-compatible base URL (".../v1") of the llama-server that serves
 	// the provider = "local" models, e.g. genix-local-ai's server over the tailnet. It takes no key.
 	LOCAL_MODEL_URL string
-	// LOCAL_FACTS_URL is the `hechos` search the genix-bot models call (genix-local-ai's docindex
-	// service over the tailnet): POST {"consulta","ruta"} → "Fact …" lines.
-	LOCAL_FACTS_URL string
+	// LOCAL_SEARCH_URL is the `search` the genix-bot models call (genix-local-ai's docindex service
+	// over the tailnet): POST {facts, functions, route, access} → "Hechos" and "Funciones" sections.
+	LOCAL_SEARCH_URL string
 	// DEFAULT_MODEL overrides the model used when a request carries no explicit
 	// one. It must name a registered model. Blank = the first MODELS entry.
 	DEFAULT_MODEL string
@@ -409,7 +409,7 @@ type fileConfig struct {
 		MetaKey            string `toml:"meta_key"`
 		OpenRouterKey      string `toml:"openrouter_key"`
 		LocalModelURL      string `toml:"local_model_url"`
-		LocalFactsURL      string `toml:"local_facts_url"`
+		LocalSearchURL     string `toml:"local_search_url"`
 		Port               int32  `toml:"port"`
 	} `toml:"agent"`
 
@@ -645,7 +645,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
 	env.LOCAL_MODEL_URL = strings.TrimSpace(file.Agent.LocalModelURL)
-	env.LOCAL_FACTS_URL = strings.TrimSpace(file.Agent.LocalFactsURL)
+	env.LOCAL_SEARCH_URL = strings.TrimSpace(file.Agent.LocalSearchURL)
 	env.AGENT_PORT = file.Agent.Port
 	env.MODELS = file.Models
 	// env.IS_DEV_ARG, not a config field: PopulateVariables sets it before this runs, precisely so

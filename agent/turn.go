@@ -50,7 +50,8 @@ type TurnRequest struct {
 	Surface     routing.SurfaceContext
 	AppLanguage routing.Language
 	// Resume answers a paused turn (ChatAgentReply.Pause) instead of starting one: the same turn
-	// continues from its checkpoint, with no new discovery. Message is the picked choice's label.
+	// continues from its checkpoint, with no new discovery (genix-bot: its pending call runs again
+	// with the pick). Message is the picked choice's label.
 	Resume *TurnResumeRequest
 }
 
@@ -138,9 +139,13 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 		" session::", session.SessionID, " mode::", turnRequest.ModeID, " path::", turnRequest.Path, " bridged::", BridgeEnabled())
 
 	var turnError error
-	if turnRequest.Resume != nil {
+	switch {
+	case turnRequest.Resume != nil && turnRequest.Resume.CheckPointID == "":
+		// genix-bot's choice cards have no checkpoint: the pending call is in the stored turn.
+		turnError = session.resumeGenixBotChoice(runContext, turnRequest.Resume.Answer)
+	case turnRequest.Resume != nil:
 		turnError = session.ResumeTurn(runContext, *turnRequest.Resume, strings.TrimSpace(turnRequest.Message))
-	} else {
+	default:
 		turnError = session.RunUserMessage(runContext, ChatUserMessage{
 			Message:     turnRequest.Message,
 			ModelHash:   turnRequest.ModelHash,

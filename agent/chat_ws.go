@@ -63,7 +63,8 @@ type ChatAgentReply struct {
 	Summary   string
 	Timestamp int64
 	// Pause is set when the turn stopped to ask (Choices) or ran out of time. The chat sends the
-	// next turn with Resume built from it, and the same turn continues from its checkpoint.
+	// next turn with Resume built from it, and the same turn continues from its checkpoint; a
+	// genix-bot choice card has no checkpoint, and its pending call runs again with the pick.
 	Pause *ChatTurnPause `json:",omitempty"`
 	// Tables and Charts are a data answer's (datafunctions.Answer). The browser stores them with the
 	// reply; they never go back to the model, the Summary does.
@@ -73,6 +74,7 @@ type ChatAgentReply struct {
 
 // ChatTurnPause is what the browser needs to resume a paused turn.
 type ChatTurnPause struct {
+	// CheckPointID is empty for a genix-bot choice card (resumeGenixBotChoice).
 	CheckPointID string
 	// InterruptID is the question asked; empty means the clock paused the turn ("continue?").
 	InterruptID string           `json:",omitempty"`

@@ -16,10 +16,16 @@ import (
 // (genix-local-ai cmd/eval-loop: captured page states). It reproduces what the training data shows:
 //
 //	user      : Ruta: /crm/customers\ncrea el cliente Pedro Pascal
-//	assistant : ver()                       → full outline
-//	assistant : hacer("74 click")           → full outline (the page changed)
-//	assistant : hacer("79 setValue Pedro")  → Delta (only the changed lines)
+//	assistant : read()                      → full outline
+//	assistant : act("74 click")             → full outline (the page changed)
+//	assistant : act("79 setValue Pedro")    → Delta (only the changed lines)
 //	assistant : Listo, llené Nombre. ¿Guardo el cliente?    (plain text ends the turn)
+//
+// A data question ends without a last model call: the function's answer is the reply.
+//
+//	user      : Ruta: /sales/sale_orders\n¿cuánto vendí esta semana?
+//	assistant : search("", "ventas totales de un periodo") → Funciones: signature lines
+//	assistant : call("sales_total", {"period":"S"})          → the Summary; the turn ends
 //
 // The last completed turn is replayed whole (user, tool calls, tool results, answer); older turns keep
 // their calls and only the first line of each tool result (see Messages).
@@ -54,10 +60,50 @@ type ActionResult struct {
 	Value string
 }
 
-// Facts answers `hechos`: "Fact <id> | <tipo> | <texto>" lines.
-type Facts interface {
-	Search(ctx context.Context, consulta, ruta string) (string, error)
+// Search answers `search`: a "Hechos" section of "Fact <id> | <tipo> | <texto>" lines and a
+// "Funciones" section of signature lines, each only when its query is not empty. route is the page
+// the user is on: the turn's route, then the last one `open` reached (facts of that page rank first).
+// The implementation adds the user's access, so only functions the user may call are listed.
+type Search interface {
+	Search(ctx context.Context, facts, functions, route string) (string, error)
 }
+
+// Functions runs the data functions `call` names. An error goes back to the model ("Error | …").
+type Functions interface {
+	Call(ctx context.Context, name string, arguments map[string]any) (FunctionResult, error)
+}
+
+// FunctionResult is a call that ends the turn: an Answer, or a Choice the user must make first.
+type FunctionResult struct {
+	Answer *FunctionAnswer
+	Choice *FunctionChoice
+}
+
+// FunctionAnswer is the reply of a data function. Summary is the tool message later turns replay
+// (they never see the table); Display holds the tables and charts, opaque here: the adapter that
+// made it reads it back.
+type FunctionAnswer struct {
+	Message string
+	Summary string
+	Display any
+}
+
+// FunctionChoice asks which record an ambiguous name stands for. Question is the reply, Options the
+// chat's buttons, Summary the tool message ("Pregunta | ¿Qué producto es «x»? | #12 …; #13 …"), so a
+// typed reply can name the record.
+type FunctionChoice struct {
+	Question string
+	Summary  string
+	Options  []ChoiceOption
+}
+
+type ChoiceOption struct {
+	ID    string
+	Label string
+}
+
+// ErrorSearchFirst: `call` of a function no `search` of this turn listed.
+const ErrorSearchFirst = "busca la función primero"
 
 // Model is one chat call: messages and tools in, the assistant message out.
 type Model interface {
@@ -73,8 +119,12 @@ type CompletedTurn struct {
 }
 
 // TurnResult is a finished turn: the answer, the steps to replay next turn and the action log.
+// A data function that ended the turn leaves its tables and charts in Display, or its question in
+// Choice (Answer is then the question).
 type TurnResult struct {
 	Answer  string
+	Display any
+	Choice  *FunctionChoice
 	Steps   []llm.Message
 	Actions []string
 }
@@ -82,7 +132,7 @@ type TurnResult struct {
 // Messages builds the prompt of a turn: the system prompt, the replayed history and the user message.
 // Only the last completed turn keeps its tool results whole. Older turns keep each result's first line
 // ("Page /crm/customers | Clientes", an "Error | …" line): what the model did stays readable, the page
-// it read then does not — the current page comes from `ver`, never from an old outline.
+// it read then does not — the current page comes from `read`, never from an old outline.
 func Messages(history []CompletedTurn, route, text string) []llm.Message {
 	if len(history) > HistoryTurns {
 		history = history[len(history)-HistoryTurns:]
@@ -102,17 +152,16 @@ func Messages(history []CompletedTurn, route, text string) []llm.Message {
 	return append(messages, llm.Message{Role: "user", Content: UserMessage(route, text)})
 }
 
-// RunTurn runs one user message until the model answers in plain text. onToolCall sees every call
-// before it runs (Genix shows it as the turn's progress).
-func RunTurn(ctx context.Context, model Model, page Page, facts Facts, history []CompletedTurn, route, text string,
-	onToolCall func(llm.ToolCall)) (TurnResult, error) {
+// RunTurn runs one user message until the model answers in plain text or a data function answers.
+// onToolCall sees every call before it runs (Genix shows it as the turn's progress).
+func RunTurn(ctx context.Context, model Model, page Page, search Search, functions Functions, history []CompletedTurn,
+	route, text string, onToolCall func(llm.ToolCall)) (TurnResult, error) {
 
 	messages := Messages(history, route, text)
-	turn := &turnState{page: page, facts: facts}
-	// A "!" action is the user's confirmation: valid only when the previous answer asked for it.
-	if len(history) > 0 {
-		turn.confirmationAsked = strings.HasSuffix(strings.TrimSpace(history[len(history)-1].Answer), "?")
-	}
+	// A "!" action is valid when the previous answer asked, or the user asked for the final action now.
+	previousAnswerAsked := len(history) > 0 && strings.HasSuffix(strings.TrimSpace(history[len(history)-1].Answer), "?")
+	turn := &turnState{page: page, search: search, functions: functions, route: route, searchedFunctions: map[string]bool{},
+		mayConfirm: previousAnswerAsked || AsksForFinalAction(text)}
 	result := TurnResult{}
 	// A turn that keeps failing stops calling tools: the same call failing twice in a row, or three
 	// failing calls in a row, ends with one more model call without tools, which must answer.
@@ -138,7 +187,7 @@ func RunTurn(ctx context.Context, model Model, page Page, facts Facts, history [
 		assistantMessage := llm.Message{Role: "assistant", ToolCalls: reply.ToolCalls, ReasoningContent: reply.ReasoningContent}
 		result.Steps = append(result.Steps, assistantMessage)
 		messages = append(messages, assistantMessage)
-		for _, call := range reply.ToolCalls {
+		for index, call := range reply.ToolCalls {
 			if onToolCall != nil {
 				onToolCall(call)
 			}
@@ -149,6 +198,17 @@ func RunTurn(ctx context.Context, model Model, page Page, facts Facts, history [
 			toolMessage := llm.Message{Role: "tool", Content: content, ToolCallID: call.ID}
 			result.Steps = append(result.Steps, toolMessage)
 			messages = append(messages, toolMessage)
+			if functionResult := turn.functionResult; functionResult != nil {
+				// The function's answer is the reply. The calls after it never ran: the stored step
+				// keeps only what ran, so the history replays a call per tool message.
+				result.Steps[len(result.Steps)-index-2].ToolCalls = reply.ToolCalls[:index+1]
+				if functionResult.Choice != nil {
+					result.Answer, result.Choice = functionResult.Choice.Question, functionResult.Choice
+				} else {
+					result.Answer, result.Display = functionResult.Answer.Message, functionResult.Answer.Display
+				}
+				return result, nil
+			}
 			signature := call.Function.Name + " " + call.Function.Arguments
 			switch {
 			case !strings.HasPrefix(content, "Error |"):
@@ -171,52 +231,111 @@ func RunTurn(ctx context.Context, model Model, page Page, facts Facts, history [
 }
 
 type turnState struct {
-	page              Page
-	facts             Facts
-	confirmationAsked bool
-	// shownOutline is the last full outline this turn showed the model: `hacer` answers with the
-	// delta against it. A new turn starts without one, so its first `hacer` answers in full.
+	page      Page
+	search    Search
+	functions Functions
+	// route is the page the user is on: the turn's route, then the last one `open` reached.
+	route string
+	// searchedFunctions are the function names a `search` of this turn listed: the only ones `call` runs.
+	searchedFunctions map[string]bool
+	// functionResult is set by a `call` that ends the turn.
+	functionResult *FunctionResult
+	// mayConfirm: a "!" action is the user's confirmation (AsksForFinalAction or an answer that asked).
+	mayConfirm bool
+	// shownOutline is the last full outline this turn showed the model: `act` answers with the
+	// delta against it. A new turn starts without one, so its first `act` answers in full.
 	shownOutline string
 }
 
+// toolArguments are every tool's arguments; each tool reads its own.
+type toolArguments struct {
+	Route      string         `json:"route"`
+	Actions    string         `json:"actions"`
+	Facts      string         `json:"facts"`
+	Functions  string         `json:"functions"`
+	Function   string         `json:"function"`
+	Arguments  map[string]any `json:"arguments"`
+	Expression string         `json:"expression"`
+}
+
+// signatureNamePattern reads the function name of a signature line in the "Funciones" section.
+var signatureNamePattern = regexp.MustCompile(`(?m)^\s*([a-z][a-z0-9_]*)\(`)
+
 // runTool runs one call and returns the tool message and the action-log entry ("" for reads).
 func (turn *turnState) runTool(ctx context.Context, call llm.ToolCall) (string, string) {
-	arguments := map[string]string{}
+	arguments := toolArguments{}
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &arguments); err != nil && call.Function.Arguments != "" {
 		return "Error | argumentos no válidos: " + err.Error(), ""
 	}
 	switch call.Function.Name {
-	case ToolVer:
+	case ToolRead:
 		pageOutline, err := turn.page.Outline(ctx)
 		if err != nil {
-			return "Error | ver: " + err.Error(), ""
+			return "Error | read: " + err.Error(), ""
 		}
 		turn.shownOutline = pageOutline
 		return strings.TrimSpace(pageOutline), ""
 
-	case ToolIr:
-		route := strings.TrimSpace(arguments["ruta"])
+	case ToolOpen:
+		route := strings.TrimSpace(arguments.Route)
 		pageOutline, err := turn.page.Navigate(ctx, route)
 		if err != nil {
 			return "Error | " + route + ": " + err.Error(), ""
 		}
-		turn.shownOutline = pageOutline
-		return strings.TrimSpace(pageOutline), "ir " + route
+		turn.shownOutline, turn.route = pageOutline, route
+		return strings.TrimSpace(pageOutline), "open " + route
 
-	case ToolHacer:
-		return turn.runActions(ctx, arguments["acciones"])
+	case ToolAct:
+		return turn.runActions(ctx, arguments.Actions)
 
-	case ToolHechos:
-		facts, err := turn.facts.Search(ctx, arguments["consulta"], arguments["ruta"])
-		if err != nil {
-			return "Error | hechos: " + err.Error(), ""
+	case ToolSearch:
+		if strings.TrimSpace(arguments.Facts) == "" && strings.TrimSpace(arguments.Functions) == "" {
+			return "Error | search: facts y functions están vacíos", ""
 		}
-		return strings.TrimSpace(facts), ""
+		found, err := turn.search.Search(ctx, strings.TrimSpace(arguments.Facts), strings.TrimSpace(arguments.Functions), turn.route)
+		if err != nil {
+			return "Error | search: " + err.Error(), ""
+		}
+		for _, match := range signatureNamePattern.FindAllStringSubmatch(found, -1) {
+			turn.searchedFunctions[match[1]] = true
+		}
+		return strings.TrimSpace(found), ""
 
-	case ToolCalcular:
-		return CalculateResult(arguments["expresion"]), ""
+	case ToolCall:
+		if !turn.searchedFunctions[arguments.Function] {
+			return "Error | " + arguments.Function + ": " + ErrorSearchFirst, ""
+		}
+		functionResult, err := turn.functions.Call(ctx, arguments.Function, arguments.Arguments)
+		if err != nil {
+			return "Error | " + err.Error(), ""
+		}
+		turn.functionResult = &functionResult
+		if functionResult.Choice != nil {
+			return functionResult.Choice.Summary, "call " + arguments.Function
+		}
+		return functionResult.Answer.Summary, "call " + arguments.Function
+
+	case ToolCalc:
+		return CalculateResult(arguments.Expression), ""
 	}
 	return "Error | herramienta desconocida: " + call.Function.Name, ""
+}
+
+// finalActionVerbPattern finds a verb of a final action — guardar, grabar, enviar, eliminar, borrar,
+// anular, emitir, pagar, cobrar, entregar — in any person, tense or enclitic form ("guárdalo",
+// "envíala", "págale", "entrégaselo"), over text lowercased and without accents. The endings are
+// listed so most nouns that share a stem do not count ("página", "pago", "cobro", "envío",
+// "borrador"); "entrega" is both a noun and the imperative, and counts.
+var finalActionVerbPattern = regexp.MustCompile(`\b(guard|grab|envi|elimin|borr|anul|emit|pagu?|cobr|entregu?)` +
+	`(a|as|an|ar|ad|amos|ando|e|es|en|emos|ir|id|imos|iendo)((me|se|nos)?(lo|la|los|las|le|les)|me|nos|se)?\b`)
+
+var accentFolder = strings.NewReplacer("á", "a", "é", "e", "í", "i", "ó", "o", "ú", "u", "ü", "u")
+
+// AsksForFinalAction reports whether the user's message asks explicitly for a save, send, delete,
+// cancel, issue, payment or delivery: then a "!" action needs no question first. A fixed verb list,
+// no reading of intent: "crea el cliente" or "regístralo" alone still asks "¿Lo guardo?".
+func AsksForFinalAction(text string) bool {
+	return finalActionVerbPattern.MatchString(accentFolder.Replace(strings.ToLower(text)))
 }
 
 // protectedButtonPattern: buttons that save, send, delete, pay or deliver. Clicking one needs "!" (the user's
@@ -227,15 +346,15 @@ var protectedButtonPattern = regexp.MustCompile(`(?i)^\s*Button ([0-9:]+) \| (gu
 // holds, so they need "!" too: an "ok" meant for something else must never throw the user's data away.
 var discardButtonPattern = regexp.MustCompile(`(?i)^\s*Button ([0-9:]+) \| (cerrar|cancelar|close|cancel)\b`)
 
-func (turn *turnState) runActions(ctx context.Context, acciones string) (string, string) {
-	actions, err := ParseActions(acciones)
+func (turn *turnState) runActions(ctx context.Context, actionLines string) (string, string) {
+	actions, err := ParseActions(actionLines)
 	if err != nil {
 		return "Error | " + err.Error(), ""
 	}
 	// The confirmation guard reads the live page: the model may act on ids from an older outline.
 	livePage, err := turn.page.Outline(ctx)
 	if err != nil {
-		return "Error | hacer: " + err.Error(), ""
+		return "Error | act: " + err.Error(), ""
 	}
 	protectedIDs := map[string]bool{}
 	discardIDs := []string{}
@@ -254,14 +373,14 @@ func (turn *turnState) runActions(ctx context.Context, acciones string) (string,
 	}
 	for _, action := range actions {
 		needsConfirmation := action.Method == "click" && protectedIDs[action.ID]
-		if (action.Confirmed && !turn.confirmationAsked) || (needsConfirmation && !action.Confirmed) {
+		if (action.Confirmed && !turn.mayConfirm) || (needsConfirmation && !action.Confirmed) {
 			return "Error | " + action.ID + ": requiere confirmación del usuario", ""
 		}
 	}
 
 	results, nextOutline, err := turn.page.Invoke(ctx, actions)
 	if err != nil {
-		return "Error | hacer: " + err.Error(), ""
+		return "Error | act: " + err.Error(), ""
 	}
 	lines := []string{}
 	executed := []string{}
@@ -286,7 +405,7 @@ func (turn *turnState) runActions(ctx context.Context, acciones string) (string,
 
 	actionLog := ""
 	if len(executed) > 0 {
-		actionLog = "hacer " + strings.Join(executed, "; ")
+		actionLog = "act " + strings.Join(executed, "; ")
 	}
 	return strings.Join(lines, "\n"), actionLog
 }

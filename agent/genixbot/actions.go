@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// Action is one `hacer` line: `[! ]<id> <método> [argumento]`. The argument is the rest of the line.
-// "!" marks a save/send/delete the user confirmed in their last message.
+// Action is one `act` line: `[! ]<id> <método> [argumento]`. The argument is the rest of the line.
+// "!" marks a save/send/delete the user asked for or confirmed in their last message.
 type Action struct {
 	Confirmed bool
 	ID        string // plain ("79") or composite ("75:300"), copied from the outline
@@ -17,10 +17,10 @@ type Action struct {
 
 var actionLinePattern = regexp.MustCompile(`^(! )?([0-9]+(?::[0-9]+)?) (setValue|select|search|selectRow|remove|click|open|close)(?: (.+))?$`)
 
-// ParseActions reads the `acciones` argument of `hacer`, one action per line.
-func ParseActions(acciones string) ([]Action, error) {
+// ParseActions reads the `actions` argument of `act`, one action per line.
+func ParseActions(actionLines string) ([]Action, error) {
 	actions := []Action{}
-	for _, line := range strings.Split(strings.TrimSpace(acciones), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(actionLines), "\n") {
 		match := actionLinePattern.FindStringSubmatch(strings.TrimSpace(line))
 		if match == nil {
 			return nil, fmt.Errorf("línea %q no sigue `id método argumento`", line)
@@ -30,7 +30,7 @@ func ParseActions(acciones string) ([]Action, error) {
 	return actions, nil
 }
 
-// String renders the action back as its `hacer` line, for the turn's action log.
+// String renders the action back as its `act` line, for the turn's action log.
 func (action Action) String() string {
 	line := action.ID + " " + action.Method
 	if action.Confirmed {
@@ -51,11 +51,11 @@ func ErrorNoMethod(componentType, method string) string {
 	return componentType + " no tiene el método " + method
 }
 
-// SearchShown caps the matches a `search` shows: a short list keeps the prompt small, and "+N más"
+// SearchShown caps the matches a component's search method shows: a short list keeps the prompt small, and "+N más"
 // tells the model to narrow the search.
 const SearchShown = 10
 
-// SearchMatches renders a search's matches ("[id] label") the way `hacer` shows them; an empty search
+// SearchMatches renders a search's matches ("[id] label") the way `act` shows them; an empty search
 // says so instead of showing nothing.
 func SearchMatches(options []string) string {
 	if len(options) == 0 {
