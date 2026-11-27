@@ -33,15 +33,26 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// Everything lands in the OS temp dir, next to the screenshot the backend already writes there
-// (agent/http.go:writeScreenshot).
-var (
-	statePath      = filepath.Join(os.TempDir(), "genix-agent-browser.json")
-	consoleLogPath = filepath.Join(os.TempDir(), "genix-agent-console.jsonl")
-	profileDir     = filepath.Join(os.TempDir(), "genix-agent-profile")
-	shotPath       = filepath.Join(os.TempDir(), "genix-agent-shot.png")
-	pageHTMLPath   = filepath.Join(os.TempDir(), "genix-agent-page.html")
-)
+// instance is "" for the default browser. `-instance <name>` before the subcommand runs another one
+// next to it, with its own state, profile, console log, shots and tab, so two drivers (two agents,
+// or a person and an agent) never share a page.
+var instance string
+
+// tempPath is where a file of this instance lands: the OS temp dir, next to the screenshot the
+// backend already writes there (agent/http.go:writeScreenshot), with "-<instance>" before the extension.
+func tempPath(name string) string {
+	if instance != "" {
+		extension := filepath.Ext(name)
+		name = strings.TrimSuffix(name, extension) + "-" + instance + extension
+	}
+	return filepath.Join(os.TempDir(), name)
+}
+
+func statePath() string      { return tempPath("genix-agent-browser.json") }
+func consoleLogPath() string { return tempPath("genix-agent-console.jsonl") }
+func profileDir() string     { return tempPath("genix-agent-profile") }
+func shotPath() string       { return tempPath("genix-agent-shot.png") }
+func pageHTMLPath() string   { return tempPath("genix-agent-page.html") }
 
 // browserState is what a short-lived subcommand needs to find the browser `start` launched.
 type browserState struct {
@@ -52,16 +63,28 @@ type browserState struct {
 	CompanyID int
 	UserID    int
 	StartedAt string
+	// TabID is the agent tab id of the browser's page (sessionStorage __agent_tab_id): every call to
+	// the agent server names it, so a second browser never makes a call ambiguous.
+	TabID string
 }
 
 func readBrowserState() (browserState, error) {
 	state := browserState{}
-	raw, err := os.ReadFile(statePath)
+	raw, err := os.ReadFile(statePath())
 	if err != nil {
-		return state, fmt.Errorf("no hay un navegador corriendo (falta %s). Ejecuta primero: go run . agent_browser start", statePath)
+		return state, fmt.Errorf("no hay un navegador corriendo (falta %s). Ejecuta primero: go run . agent_browser start", statePath())
 	}
 	if err := json.Unmarshal(raw, &state); err != nil {
-		return state, fmt.Errorf("el archivo de estado %s está corrupto: %w", statePath, err)
+		return state, fmt.Errorf("el archivo de estado %s está corrupto: %w", statePath(), err)
+	}
+	// A browser started before the state kept its tab: read the tab from the page.
+	if state.TabID == "" && processIsAlive(state.ChromePID) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if client, _, err := browser.ConnectToPage(ctx, state.DebugPort); err == nil {
+			_ = waitForTabID(ctx, client, 3*time.Second, &state)
+			client.Close()
+		}
 	}
 	return state, nil
 }
@@ -71,7 +94,7 @@ func writeBrowserState(state browserState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(statePath, raw, 0o600)
+	return os.WriteFile(statePath(), raw, 0o600)
 }
 
 // defaultAgentURL resolves where the local agent server (genix/agent) listens by reading the same
@@ -124,6 +147,9 @@ func findChromeBinary(override string) (string, error) {
 // main dispatches every `agent_browser` subcommand.
 func main() {
 	args := os.Args[1:]
+	if len(args) >= 2 && args[0] == "-instance" {
+		instance, args = args[1], args[2:]
+	}
 	if len(args) == 0 {
 		printAgentBrowserUsage()
 		os.Exit(1)
@@ -149,6 +175,8 @@ func main() {
 		err = agentBrowserCompare(args[1:])
 	case "console":
 		err = agentBrowserConsole(args[1:])
+	case "chat":
+		err = agentBrowserChat(args[1:])
 	default:
 		printAgentBrowserUsage()
 		os.Exit(1)
@@ -163,6 +191,8 @@ func main() {
 func printAgentBrowserUsage() {
 	fmt.Println(`agent_browser — headless dev browser for the agentic API
 
+  [-instance NAME] <command>  a second browser beside the default one (own state, profile, tab);
+                              give its start a free -port (e.g. 9223)
   start [-company 1] [-user 1] [-route /] [-app URL] [-agent URL]
         [-width 1440] [-height 900] [-port 9222] [-headed] [-chrome PATH]
                             launch Chrome, log in, hold it open (run in background)
@@ -174,7 +204,12 @@ func printAgentBrowserUsage() {
   act '<json actions>'      run actions: [{"ID":"60","Method":"setValue","Args":["x"]}]
   compare                   screenshot + in-page render + agentic HTML, all at once
   console [-n 50] [-level error] [-follow]
-                            page console, exceptions and failed requests`)
+                            page console, exceptions and failed requests
+  chat send [-model ID] [-timeout 180s] '<texto>'
+                            send a chat turn as the user would; prints the reply (message, summary,
+                            tables, charts, choice card)
+  chat pick <ID|label>      answer the last reply's choice card
+  chat rows [-n 8]          the chat's last rows`)
 }
 
 func agentBrowserStart(args []string) error {
@@ -186,7 +221,8 @@ func agentBrowserStart(args []string) error {
 	agentURL := flags.String("agent", defaultAgentURL(), "origin of the agent server (default: agent.port in config.toml)")
 	width := flags.Int("width", 1440, "ancho de la ventana")
 	height := flags.Int("height", 900, "alto de la ventana")
-	debugPort := flags.Int("port", 9222, "puerto de depuración de chrome")
+	// A named instance defaults to the next port, so it starts beside the default browser.
+	debugPort := flags.Int("port", map[bool]int{true: 9222, false: 9223}[instance == ""], "puerto de depuración de chrome")
 	headed := flags.Bool("headed", false, "abrir con ventana visible (para depurar el propio launcher)")
 	chromePath := flags.String("chrome", "", "ruta al binario de chrome")
 	if err := flags.Parse(args); err != nil {
@@ -216,7 +252,7 @@ func agentBrowserStart(args []string) error {
 
 	chromeArgs := []string{
 		fmt.Sprintf("--remote-debugging-port=%d", *debugPort),
-		"--user-data-dir=" + profileDir,
+		"--user-data-dir=" + profileDir(),
 		fmt.Sprintf("--window-size=%d,%d", *width, *height),
 		"--no-first-run",
 		"--no-default-browser-check",
@@ -261,7 +297,7 @@ func agentBrowserStart(args []string) error {
 	// From here on Chrome is running, so every failure path has to take it down with us.
 	shutdown := func() {
 		killProcessGroup(state.ChromePID)
-		_ = os.Remove(statePath)
+		_ = os.Remove(statePath())
 	}
 
 	if err := browser.WaitForDebugPort(ctx, *debugPort, 20*time.Second); err != nil {
@@ -286,7 +322,7 @@ func agentBrowserStart(args []string) error {
 	}
 	fmt.Printf("target     %s\n", target.ID)
 
-	consoleLog, err := os.Create(consoleLogPath)
+	consoleLog, err := os.Create(consoleLogPath())
 	if err != nil {
 		shutdown()
 		return err
@@ -297,13 +333,20 @@ func agentBrowserStart(args []string) error {
 	// page's boot errors are exactly what we must not miss.
 	go collectConsoleEvents(events, consoleLog)
 
-	if err := waitForRegisteredTab(ctx, *agentURL, 40*time.Second); err != nil {
-		fmt.Fprintln(os.Stderr, "aviso:", err)
-		fmt.Fprintf(os.Stderr, "revisa %s para ver por qué la página no llegó a registrarse\n", consoleLogPath)
-	} else {
-		fmt.Printf("tab        registrada en el backend — el agente ya puede usar POST %s/agent\n", *agentURL)
+	registered := waitForTabID(ctx, client, 40*time.Second, &state)
+	if registered == nil {
+		registered = writeBrowserState(state)
 	}
-	fmt.Printf("console    %s\n", consoleLogPath)
+	if registered == nil {
+		registered = waitForRegisteredTab(ctx, agentEndpoint(state, "get=menu"), 40*time.Second)
+	}
+	if registered != nil {
+		fmt.Fprintln(os.Stderr, "aviso:", registered)
+		fmt.Fprintf(os.Stderr, "revisa %s para ver por qué la página no llegó a registrarse\n", consoleLogPath())
+	} else {
+		fmt.Printf("tab        %s registrada en el backend — el agente ya puede usar POST %s\n", state.TabID, agentEndpoint(state, ""))
+	}
+	fmt.Printf("console    %s\n", consoleLogPath())
 	fmt.Println("listo. Ctrl-C (o `agent_browser stop`) para cerrar.")
 
 	<-ctx.Done()
@@ -312,14 +355,44 @@ func agentBrowserStart(args []string) error {
 	return nil
 }
 
+// agentEndpoint is the agent server's /agent with this browser's tab: the backend only guesses the
+// tab when exactly one is connected (agent.ResolveTab), and a second browser would break the guess.
+func agentEndpoint(state browserState, query string) string {
+	endpoint := state.AgentURL + "/agent?tab=" + state.TabID
+	if query != "" {
+		endpoint += "&" + query
+	}
+	return endpoint
+}
+
+// waitForTabID reads the page's agent tab id once the app minted it (sse.ts getAgentTabID).
+func waitForTabID(ctx context.Context, client *browser.Client, timeout time.Duration, state *browserState) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		tabID, err := evaluateInPage[string](ctx, client, `sessionStorage.getItem("__agent_tab_id") || ""`)
+		if err == nil && tabID != "" {
+			state.TabID = tabID
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("la página no creó su id de pestaña en %s (%v)", timeout, err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+}
+
 // waitForRegisteredTab blocks until the backend can reach the tab. GET /agent?get=menu answers 503
 // while no browser holds an SSE stream, which makes it the readiness probe for the whole chain:
 // page loaded → session minted → stream opened → tab registered.
-func waitForRegisteredTab(ctx context.Context, agentURL string, timeout time.Duration) error {
+func waitForRegisteredTab(ctx context.Context, probeURL string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	lastStatus := 0
 	for {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, agentURL+"/agent?get=menu", nil)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
 		if err != nil {
 			return err
 		}
@@ -348,7 +421,7 @@ func agentBrowserStop() error {
 		return err
 	}
 	killProcessGroup(state.ChromePID)
-	_ = os.Remove(statePath)
+	_ = os.Remove(statePath())
 	fmt.Printf("navegador detenido (pid %d)\n", state.ChromePID)
 	return nil
 }
@@ -370,7 +443,7 @@ func agentBrowserStatus() error {
 		fmt.Printf("url        no disponible: %v\n", err)
 	}
 
-	if err := waitForRegisteredTab(ctx, state.AgentURL, time.Second); err != nil {
+	if err := waitForRegisteredTab(ctx, agentEndpoint(state, "get=menu"), time.Second); err != nil {
 		fmt.Printf("tab        NO registrada en el backend: %v\n", err)
 	} else {
 		fmt.Println("tab        registrada en el backend")

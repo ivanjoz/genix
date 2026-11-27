@@ -59,14 +59,14 @@ func readAllLimited(body io.Reader) (string, error) {
 
 // postAgentActions runs a batch through the backend and returns the post-action page snapshot.
 // An empty batch is the documented "what does the page look like now?" call.
-func postAgentActions(ctx context.Context, agentURL string, actions []agentAction) (agentResponse, error) {
+func postAgentActions(ctx context.Context, endpoint string, actions []agentAction) (agentResponse, error) {
 	result := agentResponse{}
 	body, err := json.Marshal(map[string]any{"Actions": actions})
 	if err != nil {
 		return result, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, agentURL+"/agent", bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return result, err
 	}
@@ -74,7 +74,7 @@ func postAgentActions(ctx context.Context, agentURL string, actions []agentActio
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return result, fmt.Errorf("no se pudo contactar al backend en %s: %w", agentURL, err)
+		return result, fmt.Errorf("no se pudo contactar al backend en %s: %w", endpoint, err)
 	}
 	defer response.Body.Close()
 
@@ -115,7 +115,7 @@ func agentBrowserGoto(args []string) error {
 
 	// ReturnPageContent makes the browser wait for the route change and the DOM to settle before
 	// answering, so the snapshot below belongs to the new page and not the old one.
-	response, err := postAgentActions(ctx, state.AgentURL, []agentAction{
+	response, err := postAgentActions(ctx, agentEndpoint(state, ""), []agentAction{
 		{Method: "navigate", Args: []any{args[0]}, ReturnPageContent: true},
 	})
 	if err != nil {
@@ -128,7 +128,7 @@ func agentBrowserGoto(args []string) error {
 
 func agentBrowserHTML(args []string) error {
 	flags := newFlagSet("html")
-	outPath := flags.String("out", pageHTMLPath, "dónde escribir el HTML agéntico")
+	outPath := flags.String("out", pageHTMLPath(), "dónde escribir el HTML agéntico")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func agentBrowserHTML(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err := postAgentActions(ctx, state.AgentURL, []agentAction{})
+	response, err := postAgentActions(ctx, agentEndpoint(state, ""), []agentAction{})
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func agentBrowserAct(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	response, err := postAgentActions(ctx, state.AgentURL, actions)
+	response, err := postAgentActions(ctx, agentEndpoint(state, ""), actions)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func summarizeActionResult(raw json.RawMessage) string {
 // agentBrowserShot captures what the browser actually painted, straight from Chrome.
 func agentBrowserShot(args []string) error {
 	flags := newFlagSet("shot")
-	outPath := flags.String("out", shotPath, "dónde escribir el PNG")
+	outPath := flags.String("out", shotPath(), "dónde escribir el PNG")
 	fullPage := flags.Bool("full", false, "capturar la página completa, no sólo el viewport")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -328,7 +328,7 @@ func agentBrowserCompare(args []string) error {
 
 	fmt.Printf("url        %s\n", target.URL)
 
-	shotFile, width, height, err := captureBrowserScreenshot(ctx, client, shotPath, *fullPage)
+	shotFile, width, height, err := captureBrowserScreenshot(ctx, client, shotPath(), *fullPage)
 	if err != nil {
 		return err
 	}
@@ -336,28 +336,28 @@ func agentBrowserCompare(args []string) error {
 
 	// The in-page render is fetched through the backend so it goes down the same path the product
 	// agent uses; the handler writes the PNG and answers with its location.
-	if inPagePath, err := fetchInPageScreenshot(ctx, state.AgentURL); err != nil {
+	if inPagePath, err := fetchInPageScreenshot(ctx, agentEndpoint(state, "get=screenshot")); err != nil {
 		fmt.Printf("in-page    falló: %v\n", err)
 	} else {
 		fmt.Printf("in-page    %s  ← lo que modern-screenshot produce\n", inPagePath)
 	}
 
-	response, err := postAgentActions(ctx, state.AgentURL, []agentAction{})
+	response, err := postAgentActions(ctx, agentEndpoint(state, ""), []agentAction{})
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(pageHTMLPath, []byte(response.Page.HTML), 0o600); err != nil {
+	if err := os.WriteFile(pageHTMLPath(), []byte(response.Page.HTML), 0o600); err != nil {
 		return err
 	}
-	fmt.Printf("html       %s (%d bytes)  ← por lo que el agente navega\n", pageHTMLPath, len(response.Page.HTML))
+	fmt.Printf("html       %s (%d bytes)  ← por lo que el agente navega\n", pageHTMLPath(), len(response.Page.HTML))
 	printComponents(response.Page)
 	return nil
 }
 
 // fetchInPageScreenshot triggers the app's own DOM renderer through GET /agent?get=screenshot and
 // returns the path the backend wrote.
-func fetchInPageScreenshot(ctx context.Context, agentURL string) (string, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, agentURL+"/agent?get=screenshot", nil)
+func fetchInPageScreenshot(ctx context.Context, screenshotURL string) (string, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, screenshotURL, nil)
 	if err != nil {
 		return "", err
 	}

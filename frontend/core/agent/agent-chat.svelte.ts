@@ -17,7 +17,7 @@ import {
   subscribeAgentChat,
   type ChatStreamEvent,
 } from './sse';
-import { getSelectedAgentModelHash } from './models.svelte';
+import { getSelectedAgentModelHash, setSelectedAgentModelHash } from './models.svelte';
 import {
   AGENT_ROLE_AGENT,
   AGENT_ROLE_STATUS,
@@ -307,11 +307,45 @@ const handleChatEvent = async (env: ChatStreamEvent) => {
   }
 };
 
+// The header panel registers how to open itself, so a driver outside the component can show the
+// conversation it sends.
+let openRegisteredPanel = () => {};
+export const registerAgentPanelOpener = (open: () => void) => { openRegisteredPanel = open; };
+
+// waitForReplyAfter waits for the agent row of a turn that already resolved: the reply lands through
+// handleChatEvent, which adds its row a moment after the turn's POST returns.
+const waitForReplyAfter = async (rowCount: number) => {
+  for (let elapsed = 0; elapsed < 5000; elapsed += 100) {
+    if (agentChat.messages.slice(rowCount).some((row) => row.role === AGENT_ROLE_AGENT)) { return; }
+    await wait(100);
+  }
+};
+
 // Subscribed once for the page's life: the events must land even while no chat widget is mounted.
 if (browser) {
   subscribeAgentChat((env) => { void handleChatEvent(env); });
   (window as any).__agentChat = Object.assign((window as any).__agentChat || {}, {
     debugLog: () => JSON.parse(localStorage.getItem(CHAT_LOG_KEY) || '[]'),
+    // Dev drivers (scripts/agent_browser chat) use the same calls as the chat widget: send a turn,
+    // answer the last reply's choice card, read the rows. Each resolves once the reply is in.
+    send: async (text: string, modelHash?: string) => {
+      if (modelHash) { setSelectedAgentModelHash(modelHash); }
+      const rowCount = agentChat.messages.length;
+      openRegisteredPanel();
+      await sendAgentTurn(text, openRegisteredPanel);
+      await waitForReplyAfter(rowCount);
+    },
+    pick: async (choice: string) => {
+      const pause = agentChat.messages.at(-1)?.pause;
+      const option = pause?.Choices?.find((candidate) => candidate.ID === choice || candidate.Label === choice);
+      if (!pause || !option) {
+        throw new Error(`no choice «${choice}» on the last reply: ${(pause?.Choices || []).map((candidate) => `${candidate.ID} ${candidate.Label}`).join('; ') || 'it has no choice card'}`);
+      }
+      const rowCount = agentChat.messages.length;
+      await answerAgentPause(pause, option.ID, option.Label, openRegisteredPanel);
+      await waitForReplyAfter(rowCount);
+    },
+    rows: () => JSON.parse(JSON.stringify(agentChat.messages)),
   });
 }
 

@@ -62,6 +62,35 @@ go run . agent_browser console -level error
 go run . agent_browser stop
 ```
 
+## The chat
+
+`chat` drives the agent chat as a user does, through the page's own chat (`window.__agentChat` in
+`frontend/core/agent/agent-chat.svelte.ts`: the same calls as the widget). The turn runs the real path —
+POST `p-agent-turn`, the streamed reply, the rendered answer — and `shot` shows it.
+
+```bash
+go run . agent_browser chat send -model genix-bot 'ventas de los últimos 30 días'   # prints the reply
+go run . agent_browser chat pick 3839        # answer the last reply's choice card (ID or label)
+go run . agent_browser chat rows -n 8        # the last rows
+```
+
+The reply prints its message, summary, tables and charts (columns, row count, first rows) and a choice
+card's options with the IDs `pick` takes. `-model` is a `[[models]]` id of `config.toml`.
+
+## A second browser: `-instance`
+
+`-instance <name>` before the command runs another browser next to the default one, with its own
+state, profile, console log, shots and tab (debug port 9223 unless `start -port` says otherwise):
+
+```bash
+go run . agent_browser -instance smoke start -route /sales/sale_orders   # in the background
+go run . agent_browser -instance smoke chat send 'top 5 productos del mes pasado'
+go run . agent_browser -instance smoke stop
+```
+
+Every call names its tab (`/agent?tab=<id>`, read from the page's `__agent_tab_id`), so two
+browsers never make a call ambiguous.
+
 Outputs land in the temp dir: `genix-agent-shot.png` (browser), `genix-agent-screenshot.png`
 (in-page), `genix-agent-page.html`, `genix-agent-console.jsonl`.
 
@@ -98,9 +127,9 @@ Full contract: [`agent/HTTP_API.md`](../../../agent/HTTP_API.md) and
   its output file.
 - **`start` dying does not kill Chrome** — deliberately, so a lost shell does not strand the tab.
   Console collection *does* stop. `stop` reaps Chrome either way, by pid from the state file.
-- **One tab only.** `agent.ResolveTab` auto-resolves solely when exactly one tab is connected, so a
-  human browser sitting on the app with `?agent=1` will collide with the headless one. `start`
-  refuses to launch a second browser.
+- **One browser per instance.** `start` refuses a second browser for the same instance; use
+  `-instance` for another. Every call names its tab, so a human browser on the app with `?agent=1`
+  no longer collides with the headless one.
 - **The backend restarts on Go edits.** The tab reconnects on its own with backoff; a command that
   fails with `connection refused` usually just needs retrying a few seconds later.
 - **Actions write real data.** The session is a real user against the real database — `Guardar`

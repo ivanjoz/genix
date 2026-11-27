@@ -497,7 +497,8 @@ func genixBotStatusLabel(call llm.ToolCall) string {
 		}
 		return "Ejecutando acciones…"
 	case genixbot.ToolSearch:
-		return "Consultando la documentación…"
+		// One label for both queries: a search of functions alone is not documentation.
+		return "Buscando…"
 	case genixbot.ToolCall:
 		return "Consultando tus datos…"
 	case genixbot.ToolCalc:

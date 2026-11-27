@@ -1,6 +1,9 @@
 package exec
 
 import (
+	"strconv"
+	"strings"
+
 	"app/core"
 	"app/db"
 )
@@ -13,11 +16,16 @@ import (
 // deploy changes what a table indexes, like the BrandName column products gained.
 func ReindexTextSearch(args *core.ExecArgs) core.FuncResponse {
 	db.Connect(MakeConnParams())
+	// From the command line the company comes after the function: `go run . dev fn-reindex-text 1`.
+	companyID := args.Param1
+	if companyID == 0 {
+		companyID, _ = strconv.ParseInt(strings.TrimSpace(args.Message), 10, 64)
+	}
 
 	for _, controller := range MakeControllers() {
 		var err error
-		if args.Param1 > 0 {
-			err = controller.ReindexTextSearch(int32(args.Param1))
+		if companyID > 0 {
+			err = controller.ReindexTextSearch(int32(companyID))
 		} else {
 			err = controller.ReindexTextSearchAll()
 		}

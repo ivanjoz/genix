@@ -158,9 +158,9 @@ func agentBrowserConsole(args []string) error {
 		return fmt.Errorf("nivel desconocido %q; usa debug|log|info|warning|error", *minLevel)
 	}
 
-	file, err := os.Open(consoleLogPath)
+	file, err := os.Open(consoleLogPath())
 	if err != nil {
-		return fmt.Errorf("no hay log de consola en %s; ¿está corriendo `agent_browser start`?", consoleLogPath)
+		return fmt.Errorf("no hay log de consola en %s; ¿está corriendo `agent_browser start`?", consoleLogPath())
 	}
 	defer file.Close()
 
@@ -185,7 +185,7 @@ func agentBrowserConsole(args []string) error {
 		printConsoleRecord(record)
 	}
 	if len(matching) == 0 {
-		fmt.Printf("(sin registros de nivel %s o superior en %s)\n", *minLevel, consoleLogPath)
+		fmt.Printf("(sin registros de nivel %s o superior en %s)\n", *minLevel, consoleLogPath())
 	}
 
 	if !*follow {

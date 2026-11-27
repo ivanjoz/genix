@@ -114,20 +114,24 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	runContext, cancelRun := context.WithTimeout(parentContext, turnTimeout)
 	defer cancelRun()
-	// No required access: the route gate in main-handlers.go already decided this request, and this
-	// charge is a second one for the turn's own budget rather than a repeat of the gate.
-	if _, rateLimitError := core.ChargeAPIUsage(
-		runContext, req.User.CompanyID, req.User.ID, req.RouteID, "POST", len(*req.Body), nil,
-	); rateLimitError != nil {
-		core.Log("agent.turn base credit rejected tab::", shortTabID(tab), " err::", rateLimitError)
-		return req.MakeCreditRateLimitResponse(rateLimitError)
+	// [fareward].bypass runs without the daemon (load tests, local captures): the turn charges
+	// nothing, as the backend's route gate does (backend/main-handlers.go).
+	if !core.Env.FAREWARD_BYPASS {
+		// No required access: the route gate in main-handlers.go already decided this request, and this
+		// charge is a second one for the turn's own budget rather than a repeat of the gate.
+		if _, rateLimitError := core.ChargeAPIUsage(
+			runContext, req.User.CompanyID, req.User.ID, req.RouteID, "POST", len(*req.Body), nil,
+		); rateLimitError != nil {
+			core.Log("agent.turn base credit rejected tab::", shortTabID(tab), " err::", rateLimitError)
+			return req.MakeCreditRateLimitResponse(rateLimitError)
+		}
+		// Every nested LLM request inherits the authenticated identity and the route that opened the
+		// turn, so what a turn spends on inference lands on POST.p-agent-turn rather than in a bucket
+		// of its own. Without the identity, ChargeInferenceUsage charges nothing.
+		runContext = core.WithCreditRateLimitIdentity(
+			runContext, req.User.CompanyID, req.User.ID, req.RouteID,
+		)
 	}
-	// Every nested LLM request inherits the authenticated identity and the route that opened the
-	// turn, so what a turn spends on inference lands on POST.p-agent-turn rather than in a bucket
-	// of its own.
-	runContext = core.WithCreditRateLimitIdentity(
-		runContext, req.User.CompanyID, req.User.ID, req.RouteID,
-	)
 	// A turn on a local model shows its progress bar in the chat, and its calls carry the turn id to
 	// the model log on the llama-server side.
 	turnID := newCheckPointID() // a unique time-based id, the same kind a checkpoint uses

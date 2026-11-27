@@ -15,7 +15,8 @@
   import { ensureAgentStream } from './sse';
   import { AGENT_ROLE_STATUS, AGENT_ROLE_USER } from './chat_history.idb';
   import {
-    agentChat, answerAgentPause, chatLog, ensureAgentHistoryLoaded, expandAgentPanelForUserInteraction, sendAgentTurn,
+    agentChat, answerAgentPause, chatLog, ensureAgentHistoryLoaded, expandAgentPanelForUserInteraction, registerAgentPanelOpener,
+    sendAgentTurn,
     type AgentProgressPayload,
   } from './agent-chat.svelte';
   import AgentAnswer from './AgentAnswer.svelte';
@@ -127,6 +128,8 @@
     isHeaderPanelOpen = true;
     warmUpAgent();
   };
+  // The header panel is the one a dev driver (agent_browser chat) shows its turns in.
+  if (!inLayer) { registerAgentPanelOpener(openPanel); }
 
   const closePanel = () => {
     if (inLayer) { onCloseLayer?.(); } else { isHeaderPanelOpen = false; }
