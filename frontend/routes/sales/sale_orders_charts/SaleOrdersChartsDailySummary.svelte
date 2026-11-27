@@ -1,5 +1,6 @@
 <script lang="ts">
   import SquareBarSized from '#components/misc/SquareBarSized.svelte'
+  import T from '#components/misc/T.svelte'
   import VirtualCards from '#components/misc/VirtualCards.svelte'
   import { DateHelper } from '@genix/ui/utilities'
   import { formatN, formatTime } from '#libs/helpers.ts'
@@ -253,10 +254,13 @@
                 </div>
                 <div class={`flex ff-mono items-center text-[15px] leading-none ${getVariationColorClass(dailySummaryCard.variationAgainstLast7DaysAvg)}`}>
                   <i class={getVariationIconClass(dailySummaryCard.variationAgainstLast7DaysAvg)}></i>
+                  <!-- The arrows say what each variation compares against only by their place. -->
+                  <T css="sr-only" text="vs. 7-day average|vs. promedio 7 días" />
                   <span>{formatVariationValue(dailySummaryCard.variationAgainstLast7DaysAvg)}</span>
                 </div>
                 <div class={`flex ff-mono items-center text-[15px] leading-none ${getVariationColorClass(dailySummaryCard.variationAgainstPreviousWeekday)}`}>
                   <i class={getVariationIconClass(dailySummaryCard.variationAgainstPreviousWeekday)}></i>
+                  <T css="sr-only" text="vs. same day last week|vs. mismo día semana anterior" />
                   <span>{formatVariationValue(dailySummaryCard.variationAgainstPreviousWeekday)}</span>
                 </div>
               </div>
@@ -282,7 +286,7 @@
               <SquareBarSized useStripedLines="var(--line-soft)"
                 label="Delivered|Entregado"
                 value={`${formatN(dailySummaryCard.deliveredRatio * 100, 0)}%`}
-                sublabel={`${formatN(dailySummaryCard.deliveredAmount / 100, 2)} / ${formatN(dailySummaryCard.totalDeliverableAmount / 100, 2)}`}
+                sublabel={`${formatN(dailySummaryCard.deliveredAmount, 2)} / ${formatN(dailySummaryCard.totalDeliverableAmount, 2)}`}
                 size={dailySummaryCard.deliveredRatio}
                 backgroundColor="var(--green-bg-strong)"
                 background="linear-gradient(32deg, var(--green-bg-strong) 0%, var(--green-border) 99%)"

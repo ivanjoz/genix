@@ -42,7 +42,9 @@ value (1 = cliente, 2 = proveedor) that each route passes in.
 - **Person type (Tipo Persona)** is `Person|Persona` (natural person) or `Company|Empresa`
   (legal entity). It decides whether a registry number is required on this page and, together
   with `Type`, how the backend enforces the registry-number format.
-- **Registry Number (RUC)** is the customer's tax/registration identifier. Genix uses it (plus
+- **Document number (Número de documento)** is the customer's tax/registration identifier (RUC,
+  DNI or another identity document, whose type is picked in the selector at the field's left).
+  Genix uses it (plus
   the normalized name) to detect an already-existing customer when saving, so it doubles as a
   deduplication key, not only a display field.
 - **Location (Ubicación)** on this page means picking a Peru district (`distrito`) from a
@@ -81,8 +83,8 @@ Client|Editar Cliente" depending on whether a record is selected.
   backend, which treats `Email` as optional and only rejects it when a non-empty value fails
   address-format validation.
 - **Person Type (Tipo Persona)** defaults to `Person|Persona`.
-- **Registry Number (RUC)** is required only when Person Type is `Company|Empresa`, and the
-  frontend then requires 7–12 digits.
+- **Document number (Número de documento)** is required only when Person Type is
+  `Company|Empresa`, and the frontend then requires 7–12 digits.
 - **Department | Province | District** (the location selector) is required by this page's form
   for every customer; selecting a district also sets the country to Peru (`CountryID = 604`).
   The district catalog itself only ever lists Peru locations, so this page cannot register a
@@ -134,7 +136,7 @@ those original creation fields.
 
 - `¿Cómo creo un cliente nuevo?`
 - `¿Por qué me pide el RUC/documento sólo quiero registrar una persona?` Sólo se exige el
-  Registry Number cuando el Tipo Persona es Empresa.
+  Número de documento cuando el Tipo Persona es Empresa.
 - `¿Puedo registrar un cliente de otro país?` No desde esta página: el selector de ubicación
   sólo ofrece distritos del Perú.
 - `¿Cómo busco un cliente por su RUC o nombre?` Usa el buscador sobre la tabla; filtra por
@@ -162,11 +164,11 @@ those original creation fields.
   is empty.
 - **"Please enter a valid email.|Debe ingresar un email válido."**: Email is empty or missing
   "@"; this page always requires an email even though the server itself treats it as optional.
-- **"For companies, Registry Number must be 7–12 digits.|Para empresa, el RegistryNumber debe
-  tener entre 7 y 12 dígitos."**: occurs when Person Type is Company and Registry Number is
-  missing or not 7–12 digits.
-- **"Please enter a valid City.|Debe ingresar un CityID válido."** / **"...valid Country...
-  CountryID válido."**: no district was selected in the location selector.
+- **"The document number must be 7–12 digits.|El número de documento debe tener entre 7 y 12
+  dígitos."**: occurs when Person Type is Company and the document number is missing or not 7–12
+  digits.
+- **"Please select the Department / Province / District.|Debe seleccionar el Departamento /
+  Provincia / Distrito."**: no district was selected in the location selector.
 - **A saved customer looks like it "merged" into an older row instead of creating a new one**:
   its normalized name and registry number matched an existing customer; Genix updated that
   record instead of creating a duplicate.

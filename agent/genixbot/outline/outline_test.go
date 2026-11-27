@@ -31,9 +31,10 @@ func TestSpanishLabelKeepsSpanishHalf(t *testing.T) {
 	cases := map[string]string{
 		"Name|Nombre": "Nombre",
 		"Department | Province | District|Departamento | Provincia | Distrito": "Departamento / Provincia / Distrito",
-		"Opens the side layer to create a new client|cliente.":                 "Opens the side layer to create a new cliente.",
-		"Email":         "Email",
-		"Nuevo Cliente": "Nuevo Cliente",
+		"First Name|Nombres":   "Nombres",
+		"Cash Registers|Cajas": "Cajas",
+		"Email":                "Email",
+		"Nuevo Cliente":        "Nuevo Cliente",
 	}
 	for input, want := range cases {
 		if got := spanishLabel(input); got != want {
@@ -173,5 +174,55 @@ func TestRenderReadsARoleGrid(t *testing.T) {
 	}
 	if !strings.Contains(got, "Table 9 | Lunes\n Row | 23 | {CellInput 9:602") {
 		t.Fatalf("want the grid's header and row, got\n%s", got)
+	}
+}
+
+// The exchange-rate calendar: a day header spans its three columns, the second level names them.
+func TestRenderJoinsTheGroupedHeadersOfARoleGrid(t *testing.T) {
+	snapshot := `<Table id="9"><div role="row">` +
+		`<div role="columnheader" aria-colspan="3">Lunes</div><div role="columnheader" aria-colspan="3">Martes</div>` +
+		`<div role="columnheader" aria-rowindex="2"></div><div role="columnheader" aria-rowindex="2">Compra</div><div role="columnheader" aria-rowindex="2">Venta</div>` +
+		`<div role="columnheader" aria-rowindex="2"></div><div role="columnheader" aria-rowindex="2">Compra</div><div role="columnheader" aria-rowindex="2">Venta</div>` +
+		`</div></Table>`
+	got, err := Render(snapshot, "", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "Table 9 | Lunes | Lunes › Compra | Lunes › Venta | Martes | Martes › Compra | Martes › Venta\n") {
+		t.Fatalf("want one name per column, got\n%s", got)
+	}
+}
+
+// An Input with a document type selector holds a Select: the Input must not close at its first child.
+func TestRenderShowsTheSelectInsideAnInput(t *testing.T) {
+	snapshot := `<div><Input id="187" label="Document number|Número de documento" methods="setValue">` +
+		`<label><span>Número de documento</span></label><div><div>` +
+		`<Select id="188" label="Document number|Número de documento — tipo de documento" value="[1] DNI" methods="select,getOptions,getValue" options-count="2" options="[1] DNI|[6] RUC"/>` +
+		`</div><input /></div></Input><Input id="190" label="Email" methods="setValue"/></div>`
+	got, err := Render(snapshot, "", Options{Route: "/crm/customers"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Page /crm/customers\nInput 187 | Número de documento = \"\"\n" +
+		" Select 188 | Número de documento — tipo de documento = [1] DNI | opciones: [1] DNI, [6] RUC {select,getOptions,getValue}\n" +
+		"Input 190 | Email = \"\"\n"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Pages with tabs draw them in the app header instead of the title; the tabs stay in the outline.
+func TestRenderKeepsThePageTabsOfTheHeader(t *testing.T) {
+	snapshot := `<div><header><span>Órdenes de Compra</span><PageViews>` +
+		`<Option id="3:1" aria-label="Orders|Órdenes" selected methods="select">Órdenes</Option>` +
+		`<Option id="3:2" aria-label="Report|Reporte" methods="select">Reporte</Option></PageViews>` +
+		`<ButtonLayer id="4" label="Opens the notifications panel." value="closed" methods="click,open,close"/></header></div>`
+	got, err := Render(snapshot, "", Options{Route: "/logistics/purchase-orders"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Page /logistics/purchase-orders | Órdenes de Compra\nPageViews | [3:1] Órdenes * · [3:2] Reporte\n"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }

@@ -15,7 +15,8 @@ Layer 76 | Nuevo Cliente
  Input 79 | Nombre = ""
  Select 82 | Tipo Persona = [1] Persona | opciones: [1] Persona, [2] Empresa
  Input 84 | Email = ""
- Input 87 | Registry Number (RUC) = ""
+ Input 87 | Número de documento = ""
+  Select 88 | Número de documento — tipo de documento = [1] DNI | opciones: [1] DNI, [6] RUC, … {select,getOptions,getValue}
  Input 90 | Días de crédito = "0"
  Checkbox 93 | Agente de retención del IGV (retiene 3 %) = no
  Select 94 | Departamento / Provincia / Distrito = "" | 2088 opciones
@@ -26,7 +27,7 @@ After filling two fields, the action result is a delta instead of the whole page
 ```
 Delta /crm/customers
 ~ Input 79 | Nombre = "Pedro Pascal"
-~ Input 87 | Registry Number (RUC) = "10456789012"
+~ Input 87 | Número de documento = "10456789012"
 ```
 
 ## One schema for every line
@@ -56,18 +57,18 @@ A line without an id cannot be acted on (text, read-only tables and their rows, 
 | Other state | `[abierto]`, `[vacío]` (LayerStatic, ImageUploader) |
 | Selected / active item | ` *` after the label (options, tabs, rows) |
 | Methods | omitted when they are the type's default (Input → setValue, Button → click, Select → search,select,getOptions…); otherwise `{m1,m2}` |
-| Tabs | `OptionsStrip \| [id] Texto * · [id] Texto` (same for `PageViews`) |
+| Tabs | `OptionsStrip \| [id] Texto * · [id] Texto` (same for `PageViews`); the page's tabs (`PageViews` in the app header) follow the `Page` and `Toast` lines |
 | Registered table | `Table id \| header \| …`, then `Row tableId:rowId \| cell \| …` in header order; **5 rows**, then `More \| +N filas` (N counts every row the table holds: a virtualized table reports them with `data-rows-count`); no rows → `Text \| sin filas` |
 | Grouped headers (colspan/rowspan) | flattened to one name per leaf column: `Costo Unitario › Consolidado` (read from the raw DOM) |
 | Cell with a component | `{CellInput 75:101 = "x"}` |
 | Card grids | **5 cards** per group, then `More \| +N tarjetas` |
 | Unregistered table | `Table \| header \| …` with `Row \| …` rows and no ids |
-| Div grid (`role="row"` / `role="cell"`, genix-ui TableGrid) | read like a table: `columnheader` cells are the headers, each `row` a `Row` line |
+| Div grid (`role="row"` / `role="cell"`, genix-ui TableGrid) | read like a table: `columnheader` cells are the headers, each `row` a `Row` line; grouped headers (`aria-rowindex`, `aria-colspan`, `aria-rowspan`) flatten like a table's: `Lunes › Compra` |
 | Text | `Text \| …`; a long list of items splits into one `Text` line per item, capped at 5 |
-| Labels | Spanish half of `English\|Español`; `word\|palabra` inside an English sentence keeps the Spanish word; ` \| ` inside labels and cells becomes ` / ` |
+| Labels | Spanish half of `English\|Español` (the text after an unspaced `\|`); ` \| ` inside labels and cells becomes ` / ` |
 | **Focus mode** | while a floating layer is open (raw DOM `data-layer-id`), every container outside it collapses to `Type id \| en segundo plano: Table N (k filas)`; leaf components outside (buttons, filters) stay |
 | **Delta** | action results list only changed lines (`~` changed, `+` new, `-` removed key); the full outline is sent instead when the route changes or more than half of the lines changed (a layer opened) |
-| Dropped | app header (title kept), empty `TopLayerSelector`/`TopLayerDatePicker`, unregistered `button`/`input`/`img`, `aria-live` regions (their toasts are the `Toast` lines), text repeating the enclosing component's label |
+| Dropped | app header (title and tabs kept), empty `TopLayerSelector`/`TopLayerDatePicker`, unregistered `button`/`input`/`img`, `aria-live` regions (their toasts are the `Toast` lines), text repeating the enclosing component's label |
 
 ## Token choices (measured on LFM3's tokenizer)
 
@@ -103,8 +104,5 @@ prepends `PageSnapshotGrammar` (502 tokens) to every page result today; the fine
 
 - Several action buttons have only English descriptions as labels ("Opens the side layer to create a new
   cliente."): Genix registers no Spanish label for them.
-- Some registered components are not in the DOM (e.g. Select 88 "document type" on the customer form,
-  shown only for one person type); like the current snapshot, the outline omits them.
-- Product cards keep their visible figures unlabeled (`Stock 327 13.50`): the price has no label in the DOM.
 - Text-list splitting is heuristic (blocks over 160 characters).
 - Focus mode relies on `data-layer-id` marking floating layers; modals need the same check once captured.

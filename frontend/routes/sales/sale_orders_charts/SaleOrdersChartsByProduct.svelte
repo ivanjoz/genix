@@ -219,7 +219,9 @@
 {:else if filteredProductChartCards.length === 0}
   <div class="text-fg-muted">No se encontraron productos con ventas en los últimos 45 días.</div>
 {:else}
-  <div class="flex w-full">
+  <!-- The legend and the chart are drawing only (axis ticks, tick dates): the agent reads each
+       card's totals, which name their series themselves. -->
+  <div class="flex w-full" data-agent-hidden="true">
     <div class="mb-8 ml-auto mt-[-6px] flex flex-wrap items-center gap-12">
       {#each chartLegendSeries as chartLegendItem (chartLegendItem.name)}
         <div class="flex items-center gap-8 text-[13px] text-fg-soft">
@@ -256,47 +258,52 @@
             {#if productChartCard.totalPaidMetricValue > 0}
               <div class="flex items-center gap-6 text-fg">
                 <div class="h-10 w-10 rounded-[3px] bg-[#3b82f6]"></div>
+                <span class="sr-only">Ventas pagadas</span>
                 <div>{formatMetricValue(productChartCard.totalPaidMetricValue)}</div>
               </div>
             {/if}
             {#if productChartCard.totalUnpaidMetricValue > 0}
               <div class="flex items-center gap-6 text-fg">
                 <div class="h-10 w-10 rounded-[3px] bg-[#ef4444]"></div>
+                <span class="sr-only">Ventas no pagadas</span>
                 <div>{formatMetricValue(productChartCard.totalUnpaidMetricValue)}</div>
               </div>
             {/if}
             <div class="flex items-center gap-6 text-fg">
               <i class="icon-[fa--tag] text-fg-soft"></i>
+              <span class="sr-only">Precio</span>
               <div>
                 {productChartCard.priceReference ? `S/ ${formatN(productChartCard.priceReference, 2)}` : 'Sin precio'}
               </div>
             </div>
           </div>
 
-          <ChartCanvas
-            id={`sale-orders-product-${productChartCard.productID}-${selectedMetricMode}`}
-            height={80}
-            className="h-full w-full"
-            dateLabels={last45FechaUnix}
-            dateLabelEvery={6}
-            dateLabelFormatter={(dateUnix) => String(formatTime(Number(dateUnix || 0), 'd-M') || '')}
-            useHtmlRendered={true}
-            data={[
-              { name: 'Ventas no pagadas', type: 'bar', values: productChartCard.unpaidValues, color: '#ef4444' },
-              { name: 'Ventas pagadas', type: 'bar', values: productChartCard.paidValues, color: '#3b82f6' },
-              {
-                name: 'Precio',
-                type: 'line',
-                values: productChartCard.priceValues,
-                color: '#111827',
-                lineWidth: 1.5,
-                // Keep price readable against sales volume bars with its own configured range.
-                useOwnAxis: true,
-                yAxisMin: productChartCard.priceAxisMin,
-                yAxisMax: productChartCard.priceAxisMax
-              }
-            ]}
-          />
+          <div data-agent-hidden="true">
+            <ChartCanvas
+              id={`sale-orders-product-${productChartCard.productID}-${selectedMetricMode}`}
+              height={80}
+              className="h-full w-full"
+              dateLabels={last45FechaUnix}
+              dateLabelEvery={6}
+              dateLabelFormatter={(dateUnix) => String(formatTime(Number(dateUnix || 0), 'd-M') || '')}
+              useHtmlRendered={true}
+              data={[
+                { name: 'Ventas no pagadas', type: 'bar', values: productChartCard.unpaidValues, color: '#ef4444' },
+                { name: 'Ventas pagadas', type: 'bar', values: productChartCard.paidValues, color: '#3b82f6' },
+                {
+                  name: 'Precio',
+                  type: 'line',
+                  values: productChartCard.priceValues,
+                  color: '#111827',
+                  lineWidth: 1.5,
+                  // Keep price readable against sales volume bars with its own configured range.
+                  useOwnAxis: true,
+                  yAxisMin: productChartCard.priceAxisMin,
+                  yAxisMax: productChartCard.priceAxisMax
+                }
+              ]}
+            />
+          </div>
         </div>
       {/snippet}
     </VirtualCards>

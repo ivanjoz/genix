@@ -2,6 +2,7 @@
 import { useUI } from '@genix/ui';
 import { formatN } from '#libs/helpers.ts';
 import Card from '#components/cards/Card.svelte';
+import T from '#components/misc/T.svelte';
   import { type ProductoVenta, type VentaProducto } from "./sale_order.svelte";
   import { type Quantity, formatQuantity, hasSubUnit, totalSubUnits } from '#core/quantity.ts';
   const ui = useUI();
@@ -216,6 +217,8 @@ import Card from '#components/cards/Card.svelte';
         {/if}
         <!-- Col 4: Price -->
         <div class="font-mono ml-auto text-sm font-medium text-fg-soft text-right w-80">
+            <!-- The stock is labelled on screen, the price only by its place: name it for screen readers and the agent. -->
+            <T css="sr-only" text="Price|Precio" />
             {formatN(toSaleCurrency(price)/100, 2)}
             {#if productHasSubUnit && subUnitPrice > 0}
               <div class="text-[11px] text-purple-fg">

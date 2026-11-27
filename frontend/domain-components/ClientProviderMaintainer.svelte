@@ -127,16 +127,19 @@
       notifyFailure(tr('Please enter a valid email.|Debe ingresar un email válido.'))
       return
     }
+    // The toasts name the fields as the form labels them, never the record's field names.
     if (!clientProviderForm.CountryID || clientProviderForm.CountryID <= 0) {
-      notifyFailure(tr('Please enter a valid Country.|Debe ingresar un CountryID válido.'))
+      notifyFailure(tr('Please select a country.|Debe seleccionar un país.'))
       return
     }
     if (!clientProviderForm.CityID || !String(clientProviderForm.CityID).trim()) {
-      notifyFailure(tr('Please enter a valid City.|Debe ingresar un CityID válido.'))
+      notifyFailure(tr('Please select the Department / Province / District.|Debe seleccionar el Departamento / Provincia / Distrito.'))
       return
     }
-    if (clientProviderForm.PersonType === PersonType.COMPANY && !/^\d{7,12}$/.test(clientProviderForm.RegistryNumber || '')) {
-      notifyFailure(tr('For companies, Registry Number must be 7–12 digits.|Para empresa, el RegistryNumber debe tener entre 7 y 12 dígitos.'))
+    // Companies and every supplier need it; the server holds suppliers to the same rule.
+    const requiresRegistryNumber = clientProviderForm.PersonType === PersonType.COMPANY || !isClientList
+    if (requiresRegistryNumber && !/^\d{7,12}$/.test(clientProviderForm.RegistryNumber || '')) {
+      notifyFailure(tr('The document number must be 7–12 digits.|El número de documento debe tener entre 7 y 12 dígitos.'))
       return
     }
 
@@ -341,11 +344,11 @@
         required={true}
       />
       <Input
-        label="Registry Number (RUC)"
+        label="Document number|Número de documento"
         saveOn={clientProviderForm}
         save="RegistryNumber"
         css="col-span-24 md:col-span-12"
-        required={clientProviderForm.PersonType === PersonType.COMPANY}
+        required={clientProviderForm.PersonType === PersonType.COMPANY || !isClientList}
         leftOptions={IDENTITY_DOC_OPTIONS}
         saveLeft="IdentityDocType"
         deriveLeftOption={(value) => deriveIdentityDocType(String(value ?? ''))}

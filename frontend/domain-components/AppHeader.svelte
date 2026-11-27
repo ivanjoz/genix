@@ -70,6 +70,12 @@ import { useUI } from '@genix/ui';
 		</button>
 	{/if}
 
+	<!-- Tabs, a search box or the page's own content take the title's place: screen readers and the
+	     agent still read which page this is. -->
+	{#if pageHeader.current.content || pageHeader.current.menuSearchBox || ui.state.pageOptions?.length > 0}
+		<T css="sr-only" text={ui.state.pageTitle} />
+	{/if}
+
 	<!-- Title — reserve a stable slot so the agent pill's position doesn't
 	     jump as tabs come and go. On a phone there is no pill: the slot takes the free width. -->
 	<div class="flex items-center min-w-0 md:min-w-[200px] md:shrink-0"

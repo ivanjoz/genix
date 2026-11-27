@@ -9,6 +9,9 @@
   const BAR_AREA_HEIGHT = 26
   // The client's own biggest week fills the bar area, so each row reads as the client's trend.
   const tallestPurchases = $derived(Math.max(1, ...bars.map((bar) => bar.purchases)))
+  // The bars carry no text; screen readers and the agent read the period's totals instead.
+  const totalPurchases = $derived(bars.reduce((sum, bar) => sum + bar.purchases, 0))
+  const totalUnpaid = $derived(bars.reduce((sum, bar) => sum + bar.unpaid, 0))
 
   function barTitle(bar: IClientWeekBar): string {
     const weekLabel = `${tr('Week|Semana')} ${bar.week % 100} (20${Math.floor(bar.week / 100)})`
@@ -18,6 +21,7 @@
 </script>
 
 <div class="flex h-28 items-end gap-1" aria-label="Purchases of the client in the last weeks, unpaid part in red">
+  <span class="sr-only">S/ {formatN(totalPurchases / 100, 2)} · {tr('Unpaid|Pendiente')} S/ {formatN(totalUnpaid / 100, 2)}</span>
   {#each bars as bar (bar.week)}
     {@const barHeight = bar.purchases > 0 ? Math.max(2, Math.round((bar.purchases / tallestPurchases) * BAR_AREA_HEIGHT)) : 1}
     {@const unpaidHeight = bar.purchases > 0 ? Math.round((bar.unpaid / bar.purchases) * barHeight) : 0}

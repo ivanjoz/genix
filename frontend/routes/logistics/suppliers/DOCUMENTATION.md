@@ -42,9 +42,9 @@ Department/Province/District picker.
   create/edit labels, and the fixed `Type` sent to the server differ.
 - A **person type (`Tipo Persona`)** marks a supplier as **Person (Persona)** — a natural
   person/individual supplier — or **Company (Empresa)** — a legal entity.
-- The **Registry Number (RUC)** field stores the supplier's national identification/tax number
-  (a company's `RUC` or, informally, an individual's `DNI`). The field label always reads
-  "Registry Number (RUC)" whether the record is a Person or a Company.
+- The **Document number (Número de documento)** field stores the supplier's national
+  identification/tax number (a company's `RUC` or an individual's `DNI`); its document type is
+  picked in the selector at the field's left.
 - The **Location (Ubicación)** shown in the list combines the province and district picked
   during creation/edit; the underlying record only stores a district-level `CityID` and a fixed
   `CountryID`, not a full street address.
@@ -89,19 +89,15 @@ pre-filled. Save with the layer's **Save (Guardar)** action.
 - **Department | Province | District (Departamento | Provincia | Distrito)** is required; Genix
   fixes the country to Peru (`CountryID = 604`) automatically whenever a district is picked —
   there is no visible country selector, so this page currently only supports Peruvian locations.
-- **Registry Number (RUC)** is only marked required by this page's form when Person Type is
-  Company, and the browser then requires it to be 7–12 digits.
+- **Document number (Número de documento)** is required for every supplier, Person or Company,
+  and must be 7–12 digits.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
-The server enforces a stricter rule than the visible form: **every** supplier record — Person or
-Company — must have a Registry Number of 7–12 digits, plus a valid Department/Province/District
-and a positive country. The form's "required" marker and its own validation only apply that
-7–12 digit check when Person Type is Company, so creating an individual/Person supplier while
-leaving Registry Number empty passes the visible form but is rejected by the server with
-"El registro en posición 0 debe tener RegistryNumber numérico de 7 a 12 dígitos para
-proveedores." — an individual supplier still needs a DNI/RUC-style number entered in that field.
-Customer (`Cliente`) records saved from the sibling page are not held to that same registry-number
+**Every** supplier record — Person or Company — must have a document number of 7–12 digits,
+plus a valid Department/Province/District and a positive country; the form checks it before
+saving and the server enforces the same rule, so an individual/Person supplier still needs a
+DNI/RUC-style number entered in that field. Customer (`Cliente`) records saved from the sibling page are not held to that same registry-number
 requirement, because the server only applies it when `Type` is Provider.
 
 Name, Email, and Registry Number are trimmed (and Email lowercased) before saving. Saving always
@@ -122,15 +118,12 @@ status afterward.
   cannot be removed or deactivated from `/logistics/suppliers`.
 - There is no phone field and no free-text street address field; location is limited to
   Department/Province/District, and the country is always Peru.
-- The Registry Number field always shows the English label "Registry Number (RUC)" even in the
-  Spanish interface, and is used for both a Company's RUC and an individual's DNI-style number.
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
 
 - `¿Cómo creo un proveedor nuevo?`
-- `¿Por qué me pide un RUC/DNI si el proveedor es una persona natural?` Aunque el formulario sólo
-  marca el Registry Number como obligatorio para Empresa, el servidor exige ese número (7 a 12
-  dígitos) para todo proveedor, sea Persona o Empresa.
+- `¿Por qué me pide un RUC/DNI si el proveedor es una persona natural?` Todo proveedor, sea Persona o
+  Empresa, necesita un Número de documento de 7 a 12 dígitos.
 - `¿Cómo elimino o doy de baja un proveedor?` Actualmente esta página no ofrece esa acción.
 - `¿Puedo registrar un proveedor de otro país?` No; la ubicación siempre queda fijada a Perú.
 - Search terms: `proveedor`, `crear proveedor`, `editar proveedor`, `RUC`, `DNI`, `número de
@@ -160,11 +153,12 @@ status afterward.
   the Name field was left empty.
 - **"Please enter a valid email." / "Debe ingresar un email válido.":** Email was empty or did
   not contain `@`.
-- **"Please enter a valid City." / "Debe ingresar un CityID válido.":** no district was
-  selected in the Department/Province/District picker.
-- **"El registro en posición 0 debe tener RegistryNumber numérico de 7 a 12 dígitos para
-  proveedores." after saving:** occurs even for Person-type suppliers; enter a 7–12 digit
-  Registry Number (RUC or DNI) before saving, not only for Company-type suppliers.
+- **"Please select the Department / Province / District." / "Debe seleccionar el Departamento
+  / Provincia / Distrito.":** no district was selected in the Department/Province/District
+  picker.
+- **"The document number must be 7–12 digits." / "El número de documento debe tener entre 7 y
+  12 dígitos.":** occurs for Person-type suppliers too; enter a 7–12 digit document number (RUC
+  or DNI).
 - **A supplier appears to overwrite an existing customer, or vice versa:** the two pages share
   records keyed by Registry Number; verify the Registry Number entered does not already belong
   to a record of the other type before saving.

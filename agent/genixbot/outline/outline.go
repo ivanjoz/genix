@@ -120,6 +120,13 @@ func Render(snapshotHTML, rawHTML string, options Options) (string, error) {
 	for _, toast := range toastsFromRaw(rawHTML) {
 		renderer.lines = append(renderer.lines, "Toast | "+escapeCell(toast))
 	}
+	// The app header is dropped below, but the page's tabs live there (Órdenes · Reporte): what a
+	// tab shows is reached only through them.
+	for _, header := range findAll(root, "header") {
+		for _, pageViews := range findAll(header, "PageViews") {
+			renderer.renderOptionGroup(pageViews, 0)
+		}
+	}
 	renderer.cardPositions = cardPositions(root)
 	renderer.renderChildren(root, 0)
 	return strings.Join(renderer.lines, "\n") + "\n", nil
@@ -383,11 +390,7 @@ func (r *renderer) renderTable(n *node, depth int) {
 		for _, th := range findAll(n, "th") {
 			headers = append(headers, cleanText(innerText(th)))
 		}
-		for _, header := range allDescendants(n) {
-			if header.attrs["role"] == "columnheader" {
-				headers = append(headers, cleanText(innerText(header)))
-			}
-		}
+		headers = append(headers, FlattenHeaderGrid(gridHeaderRows(n))...)
 	}
 	line := "Table " + tableID
 	if len(headers) > 0 {
@@ -623,6 +626,25 @@ func headerRows(thead *html.Node) [][]HeaderCell {
 	return rows
 }
 
+// gridHeaderRows reads a div grid's header cells (role="columnheader", genix-ui TableGrid): a
+// grouped header states its level with aria-rowindex and its extent with aria-colspan/aria-rowspan.
+func gridHeaderRows(table *node) [][]HeaderCell {
+	rows := [][]HeaderCell{}
+	for _, header := range allDescendants(table) {
+		if header.attrs["role"] != "columnheader" {
+			continue
+		}
+		level := atoiOrOne(header.attrs["aria-rowindex"])
+		for len(rows) < level {
+			rows = append(rows, []HeaderCell{})
+		}
+		rows[level-1] = append(rows[level-1], HeaderCell{
+			Text: cleanText(innerText(header)), ColSpan: atoiOrOne(header.attrs["aria-colspan"]), RowSpan: atoiOrOne(header.attrs["aria-rowspan"]),
+		})
+	}
+	return rows
+}
+
 // FlattenHeaderGrid lays the header cells on a grid (honoring colspan/rowspan) and returns one name
 // per leaf column, made of the distinct non-empty labels stacked above it.
 func FlattenHeaderGrid(rows [][]HeaderCell) []string {
@@ -669,11 +691,12 @@ func hasCell(grid map[[2]int]string, row, column int) bool {
 // ── snapshot parsing ────────────────────────────────────────────────────────
 
 // parseSnapshot reads the snapshot as lenient XML: Go's HTML parser would lowercase the component
-// tags and move <TableBody>/<Row> out of <table> (foster parenting).
+// tags and move <TableBody>/<Row> out of <table> (foster parenting). ParsePageHTML self-closes the
+// void elements, so no auto-close list is set: its case-blind match would close an <Input> that
+// holds a component (the document type selector) at its first child.
 func parseSnapshot(snapshotHTML string) (*node, error) {
 	decoder := xml.NewDecoder(strings.NewReader(snapshotHTML))
 	decoder.Strict = false
-	decoder.AutoClose = xml.HTMLAutoClose
 	decoder.Entity = xml.HTMLEntity
 	root := &node{tag: "#root"}
 	stack := []*node{root}
@@ -794,13 +817,7 @@ func spanishLabel(label string) string {
 	label = strings.TrimSpace(label)
 	// The match is "<char>|<char>": the Spanish half starts right after the "|".
 	if location := unspacedBilingualSeparator.FindStringIndex(label); location != nil {
-		english, spanish := label[:location[0]+1], label[location[0]+2:]
-		if strings.Contains(english, " ") && !strings.Contains(strings.TrimSpace(spanish), " ") {
-			// One word swapped inside a sentence: "create a new client|cliente." → "create a new cliente."
-			label = english[:strings.LastIndex(english, " ")+1] + spanish
-		} else {
-			label = strings.TrimSpace(spanish)
-		}
+		label = strings.TrimSpace(label[location[0]+2:])
 	}
 	return strings.ReplaceAll(label, " | ", " / ")
 }

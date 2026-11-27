@@ -143,8 +143,8 @@ from the oldest day with sales in the loaded 8 weeks through today.
   "missing" day in the data still renders as an empty-value card rather than being skipped).
 - Every card shows three square indicators: **Received (Ingresado)** — the paid portion —,
   **Receivable (Por Cobrar)** — the still-unpaid portion — and **Delivered (Entregado)** — the
-  delivered share of the day's total quantity, shown as a percentage plus the raw
-  delivered/total count.
+  delivered share of the day's sales, shown as a percentage plus the delivered and total
+  amounts in soles (each product's amount weighted by the share of its quantity delivered).
 - Two variation indicators compare that day's total against (a) the average of the previous 7
   days, and (b) the same weekday exactly one week before; each only displays a value when the
   comparison base itself had sales greater than zero, otherwise it shows `--` instead of a
