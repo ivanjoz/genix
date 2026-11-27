@@ -15,6 +15,7 @@ import (
 	"app/core"
 	"app/db"
 	sales "app/sales/types"
+	"genix-agent/genixbot"
 )
 
 // Function is one data function: data, not a hand-written handler. Its arguments are a subset of
@@ -106,6 +107,22 @@ func DatabaseDeps(companyID int32) Deps {
 type Result struct {
 	Answer *Answer
 	Choice *Choice
+}
+
+// FunctionResult is the result as genix-bot reads it, the same in Genix and in the training data
+// built from it: the answer travels whole as the Display, so the reply gets its tables and charts back.
+func (result Result) FunctionResult() genixbot.FunctionResult {
+	switch {
+	case result.Choice != nil:
+		choice := &genixbot.FunctionChoice{Question: result.Choice.Question, Summary: result.Choice.Summary()}
+		for _, option := range result.Choice.Options {
+			choice.Options = append(choice.Options, genixbot.ChoiceOption(option))
+		}
+		return genixbot.FunctionResult{Choice: choice}
+	case result.Answer != nil:
+		return genixbot.FunctionResult{Answer: &genixbot.FunctionAnswer{Message: result.Answer.Message, Summary: result.Answer.Summary, Display: *result.Answer}}
+	}
+	return genixbot.FunctionResult{}
 }
 
 // dayRange is a resolved period, UnixDays inclusive.

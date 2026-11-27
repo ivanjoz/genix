@@ -348,23 +348,7 @@ type genixBotFunctions struct {
 
 func (functions genixBotFunctions) Call(ctx context.Context, name string, arguments map[string]any) (genixbot.FunctionResult, error) {
 	result, err := functions.run(ctx, name, arguments)
-	return genixBotFunctionResult(result), err
-}
-
-// genixBotFunctionResult is a datafunctions result as genix-bot reads it; the answer travels whole as
-// the Display, so the reply gets its tables and charts back.
-func genixBotFunctionResult(result datafunctions.Result) genixbot.FunctionResult {
-	switch {
-	case result.Choice != nil:
-		choice := &genixbot.FunctionChoice{Question: result.Choice.Question, Summary: result.Choice.Summary()}
-		for _, option := range result.Choice.Options {
-			choice.Options = append(choice.Options, genixbot.ChoiceOption(option))
-		}
-		return genixbot.FunctionResult{Choice: choice}
-	case result.Answer != nil:
-		return genixbot.FunctionResult{Answer: &genixbot.FunctionAnswer{Message: result.Answer.Message, Summary: result.Answer.Summary, Display: *result.Answer}}
-	}
-	return genixbot.FunctionResult{}
+	return result.FunctionResult(), err
 }
 
 func (functions genixBotFunctions) run(ctx context.Context, name string, arguments map[string]any) (datafunctions.Result, error) {
@@ -465,7 +449,7 @@ func resumeFunctionCall(ctx context.Context, functions genixBotFunctions, steps 
 	if err != nil {
 		return genixbot.FunctionResult{}, nil, err
 	}
-	functionResult := genixBotFunctionResult(result)
+	functionResult := result.FunctionResult()
 	toolMessage := ""
 	if functionResult.Choice != nil {
 		toolMessage = functionResult.Choice.Summary
