@@ -82,7 +82,7 @@ a public route, or change an existing user-created page's name, route, or status
 
 On the Pages tab, use the green **New (Nuevo)** button to open the form, or click any
 user-created card (a system-page card's body does nothing when clicked — only its pencil works).
-Save with the modal's **Save/Update** action.
+Save with the modal's **Save/Update (Guardar/Actualizar)** action.
 
 ### Required information and prerequisites (Requisitos previos)
 
@@ -172,8 +172,8 @@ None beyond the page already existing in this list, or being one of the fixed sy
 The builder loads the page's stored sections and color palette. It lets sections be added from a
 template library, reordered by drag-and-drop, edited (text, images, icons, and — for
 product/category sections — which category feeds them) through per-section panels, or edited
-through the shared AI assistant chat by describing the change in a prompt (its "Build page" mode
-targets the whole page, and "Edit section" targets only the section currently selected). A
+through the shared AI assistant chat by describing the change in a prompt (its "Build page (Construir página)" mode
+targets the whole page, and "Edit section (Editar sección)" targets only the section currently selected). A
 desktop/mobile preview toggle renders the assembled page at each width.
 
 The builder's own **Config** tab currently only displays the page's palette as reference swatches
@@ -218,7 +218,7 @@ Set or change the subdomain the store is published on, and publish the current p
 
 ### Where to find it (Dónde encontrarlo)
 
-Pages page → **Config** tab → **Domain (Dominio)** field and its Save action.
+Pages page → **Config** tab → **Domain (Dominio)** field and its **Save (Guardar)** action.
 
 ### Required information and prerequisites (Requisitos previos)
 
@@ -270,7 +270,7 @@ Open Graph title/description/image, and favicon.
 
 ### Where to find it (Dónde encontrarlo)
 
-Pages page → **Config** tab → **SEO Metatags** fields and its Save SEO action.
+Pages page → **Config** tab → **SEO Metatags** fields and its **Save SEO (Guardar SEO)** action.
 
 ### Required information and prerequisites (Requisitos previos)
 
@@ -337,7 +337,7 @@ There is no per-page SEO override here — Title/Description/OG/favicon apply to
 
 - **The per-page builder (`/webpage-builder/<PageID>`)** is not a menu entry; it is reached only
   from this page's pencil action and owns section-level editing, the color palette display, and
-  the AI-assisted "Build page"/"Edit section" chat modes.
+  the AI-assisted "Build page (Construir página)"/"Edit section (Editar sección)" chat modes.
 - **Gallery (`/webpage-builder/gallery`)** manages the uploaded images available to sections in
   the builder; not covered by this document.
 - **Security → Users (`/security/users`)** is the source of the "updated by" name shown on each

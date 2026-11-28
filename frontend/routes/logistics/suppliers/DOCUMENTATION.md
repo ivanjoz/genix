@@ -59,7 +59,7 @@ Department/Province/District picker.
 Open **Logistics (Logística) → Suppliers (Proveedores)** at `/logistics/suppliers`. The list shows
 every active supplier (records with a stored status greater than 0) with ID, Name, Person Type,
 Registry/RUC number, Email, Location (province and district), and the last-updated date/time.
-Use the search box (`Search by name, email or registry`) to filter; the filter matches the ID,
+Use the search box (`Search by name, email or registry` / `Buscar por nombre, email o registro`) to filter; the filter matches the ID,
 Name, Registry Number, or Email of the already-loaded list locally in the browser — it is not a
 server-side search, so a supplier outside the currently synced set will not appear until it is
 fetched. Clicking a row opens it in the same side layer used to create a new supplier, pre-filled
