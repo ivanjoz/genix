@@ -194,7 +194,7 @@ panel titled "Layout {warehouse name}". Use the panel's green **+** button to ad
 section. Each section shows a **Name**, a **Rows (Filas)** count, and a **Levels (Niveles)** count,
 followed by a grid of text cells (one per row/level combination) where a short label can be typed
 per storage position. A trash icon removes a whole section. Saving uses the same side panel's
-**Save** action (which calls the warehouse save operation).
+**Save (Guardar)** action (which calls the warehouse save operation).
 
 ### Required information and prerequisites (Requisitos previos)
 
